@@ -89,7 +89,7 @@ This subproject makes the isl Scala bindings accessible to Polyite.
 cd ${BASE_DIR}
 git clone TODO
 cd ${BASE_DIR}/scala-isl-utils
-export ${ISL_UTILS_BASE_DIR}/libs
+export ISL_UTILS_ROOT=${BASE_DIR}/scala-isl-utils
 mkdir libs
 cp ${BASE_DIR}/isl/interface/isl-scala.jar libs
 cp ${ISL_INSTALL}/lib/libisl*so* libs
