@@ -33,19 +33,19 @@ export LLVM_ROOT="${BASE_DIR}/llvm_root"
 
 2. Clone LLVM
 ```bash
-git clone TODO
+git clone https://github.com/stganser/llvm.git
 ```
 
 3. Get Clang
 ``` bash
 cd ${LLVM_ROOT}/llvm/tools
-git clone TODO
+git clone https://github.com/stganser/clang.git
 ```
 
 4. Get Polly
 ```bash
 cd ${LLVM_ROOT}/llvm/tools
-git clone TODO
+git clone https://github.com/stganser/polly.git
 ```
 
 5. Create a build directory for LLVM and build it using cmake
@@ -63,7 +63,7 @@ make
 2. Get and build isl
 ```bash
 cd ${BASE_DIR}
-git clone TODO
+git clone https://github.com/stganser/isl.git
 cd isl
 mkdir install
 export ISL_INSTALL="${PWD}/install"
@@ -87,7 +87,7 @@ This subproject makes the isl Scala bindings accessible to Polyite.
 1. Clone the repository:
 ```bash
 cd ${BASE_DIR}
-git clone TODO
+git clone https://github.com/stganser/scala-isl-utils.git
 cd ${BASE_DIR}/scala-isl-utils
 export ISL_UTILS_ROOT=${BASE_DIR}/scala-isl-utils
 mkdir libs
@@ -103,10 +103,11 @@ can be used to determine a polyhedron's volume. Since we do not have Scala bindi
 1. Clone the repositories:
 ```bash
 cd ${BASE_DIR}
-git clone TODO
+git clone http://repo.or.cz/barvinok.git
+git checkout barvinok-0.39
 export BARVINOK_INSTALL=barvinok/install
-git clone TODO
-export BARVINOK_BINARY_ROOT=${BASE_DIR}/count_integer_points
+git clone https://github.com/stganser/barvinok_binary.git
+export BARVINOK_BINARY_ROOT=${BASE_DIR}/barvinok_binary
 ```
 
 2. Follow the projects' build instructions and make sure that you install libbarvinok to `${BASE_DIR}/barvinok/install`.
@@ -116,7 +117,7 @@ This Scala library provides an implementation of Chernikova's algorithm to switc
 
 ```bash
 cd ${BASE_DIR}
-git clone TODO
+git clone https://github.com/stganser/chernikova.git
 export CHERNIKOVA_ROOT=${BASE_DIR}/chernikova
 ```
 
