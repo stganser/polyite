@@ -136,7 +136,7 @@ mkdir libs
 ```
 Now, download Scala 2.11.6 from [http://www.scala-lang.org/download/2.11.6.html](http://www.scala-lang.org/download/2.11.6.html) and copy `scala-2.11.6/lib/scala-library.jar` and `scala-2.11.6/lib/scala-parser-combinators_2.11-1.0.3.jar` to `${POLYITE_ROOT}/libs`
 
-3. Import the projects polyite and scala-isl-utils in Scala IDE/ Eclipse and build everything. Make sure that the libraries in `${POLYITE_ROOT}/libs` are in your build path, as well as `${ISL_UTILS_BASE_DIR}/libs/isl-scala.jar`. Make sure, that your Scala compiler assumes Scala version 2.11.
+3. Import the projects polyite and scala-isl-utils in Scala IDE/ Eclipse and build everything. Make sure that the libraries in `${POLYITE_ROOT}/libs` are in your build path, as well as `${ISL_UTILS_BASE_DIR}/libs/isl-scala.jar`. Make sure, that your Scala compiler assumes Scala version 2.11. Make chernikova and scala-isl-utils depend on the downloaded Scala version as well and make chernikova depend on scala-isl-utils.
 
 4. To use Polyite, one must execute one of the following scripts, depending on
 the desired execution mode. The scripts assume that you have OpenJDK 8 installed
