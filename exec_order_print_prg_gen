@@ -1,0 +1,2 @@
+#!/bin/bash
+/usr/lib/jvm/java-1.8.0-openjdk-amd64/bin/java -XX:+UseG1GC -Djava.library.path=${HOME}/workspace/scala-isl-utils/libs -classpath ${HOME}/workspace/schedule-optimization/bin:${HOME}/workspace/scala-isl-utils/bin:${HOME}/workspace/schedule-optimization/libs/scala-library-2.11.jar:${HOME}/workspace/scala-isl-utils/libs/isl-scala.jar:${HOME}/workspace/schedule-optimization/libs/scala-parser-combinators_2.11-1.0.4.jar polyite.util.gen_exec_order_disp.ExecOrderPrintPrgGen "$1" "$2" "$3"

@@ -1,0 +1,332 @@
+package polyite.evolution
+
+import java.util.logging.Logger
+
+import scala.Range
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashSet
+import scala.collection.mutable.ListBuffer
+import scala.math.BigInt.int2bigInt
+import scala.util.Random
+
+import polyite.config.ConfigGA
+import polyite.schedule.Dependence
+import polyite.schedule.DomainCoeffInfo
+import polyite.schedule.LineSummand
+import polyite.schedule.RaySummand
+import polyite.schedule.Schedule
+import polyite.schedule.ScheduleSpaceUtils
+import polyite.schedule.ScheduleSummand
+import polyite.schedule.ScheduleUtils
+import polyite.schedule.ScheduleVectorUtils
+import polyite.schedule.VertexSummand
+import polyite.util.Rat
+import polyite.util.Util
+import polyite.util.Util.GeneratorsRat
+
+import isl.Isl
+import isl.IslException
+
+/**
+  * Schedule mutation strategies.
+  */
+object MutationStrategies {
+  var myLogger : Logger = Logger.getLogger("")
+
+  /**
+    * Randomly replaces dimensions of the given schedule. The aggressiveness
+    * depends on {@code conf.probabilityToMutateSchedRow} and decreases with
+    * growing values of {@code generation} (simulated annealing).
+    */
+  def replaceDims(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+    myLogger.info("Applying replaceDims.")
+    val tmpCtx : isl.Ctx = Isl.initCtx()
+    val sTmpCtx : Schedule = s.transferToCtx(tmpCtx)
+    val currProbabilityToMutateSchedRow : Double = annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow)
+    val dims2Replace : Set[Int] = Random.shuffle((0 until sTmpCtx.numDims).toList).take((sTmpCtx.numDims * currProbabilityToMutateSchedRow).ceil.toInt).toSet
+    val newSched : Schedule = sTmpCtx.clone()
+    for (dim : Int <- 0 until newSched.numDims) {
+      if (dims2Replace.contains(dim)) {
+        tmpCtx.setMaxOperations(conf.islComputeout)
+        val newScheduleDim : Option[(List[Rat], Set[ScheduleSummand])] =
+          try {
+            createNewScheduleVector(newSched, dim, conf)
+          } catch {
+            case e : IslException => {
+              //              tmpCtx.resetError()
+              if (tmpCtx.getRemainingOperations <= 0) {
+                val msg : String = "The number of Isl operations for schedule space " +
+                  "construction has reached islComputeout: " + conf.islComputeout
+                myLogger.warning(msg)
+                throw new InterruptedException(msg)
+              } else
+                throw e
+            }
+          }
+        tmpCtx.resetOperations()
+        tmpCtx.setMaxOperations(0)
+        newScheduleDim match {
+          case None => ()
+          case Some((coeffs, schedSummands)) => {
+            newSched.replaceScheduleVector(dim, coeffs, schedSummands)
+          }
+        }
+      }
+    }
+    val newSchedSimplified : Schedule = ScheduleUtils.simplify(newSched.transferToCtx(s.domInfo.ctx))
+    return Some(ScheduleUtils.expandToFullSchedule(conf, conf.maxNumRays, conf.maxNumLines, newSchedSimplified,
+      ScheduleUtils.generateLinIndepScheduleVector))
+  }
+
+  private def createNewScheduleVector(s : Schedule, dim : Int,
+    conf : ConfigGA) : Option[(List[Rat], Set[ScheduleSummand])] = {
+    val domInfo : DomainCoeffInfo = s.domInfo
+    val carriedDeps : Set[Dependence] =
+      if (dim == 0)
+        Set.empty
+      else
+        s.getDependencesCarriedUpToDim(dim - 1)
+    val uncarriedDeps : Set[Dependence] = s.deps -- carriedDeps
+    val newlyCarriedDeps : Set[Dependence] = s.getDepsNewlyCarriedBy(dim)
+
+    if (!(uncarriedDeps.isEmpty && newlyCarriedDeps.isEmpty)) {
+      val (coeffSpace : isl.Set, _ : Set[Dependence]) = ScheduleSpaceUtils
+        .calculateCoeffSpace(uncarriedDeps, newlyCarriedDeps, domInfo.universe)
+      val g : GeneratorsRat = Util.constraints2GeneratorsRat(coeffSpace, conf.moveVertices, conf.rayPruningThreshold)
+
+      return Some(ScheduleUtils.generateScheduleVector(g, conf.rayCoeffsRange, -conf.lineCoeffsRange, conf.lineCoeffsRange,
+        conf.maxNumRays, conf.maxNumLines, conf))
+    } else {
+      return ScheduleUtils.generateLinIndepScheduleVector1(s, dim, conf.maxNumRays, conf.maxNumLines, conf)
+    }
+  }
+
+  /**
+    * Replaces the suffix of a given schedule. The number of preserved dimensions
+    * is randomly chosen and increases with growing values of {@code generation}
+    * (simluated annealing).
+    */
+  def replaceSuffix(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+    if (s.numDims < 2)
+      return None
+    var numDims2Preserve : Int = s.numDims - (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
+    if (numDims2Preserve >= s.numDims)
+      numDims2Preserve -= 1
+    val newSched : Schedule = new Schedule(s.domInfo, s.deps)
+    for (i <- 0 until numDims2Preserve)
+      newSched.addForeignDim(s, i)
+    val schedSet : HashSet[Schedule] = ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines,
+      conf, 1, newSched.deps.filterNot(newSched.getCarriedDeps.contains))
+
+    // The completed schedule is a full schedule by definition.
+    return Some(schedSet.head)
+  }
+
+  /**
+    * Replaces the prefix of a given schedule. The number of preserved dimensions
+    * is randomly chosen and increases with growing values of {@code generation}
+    * (simluated annealing).
+    */
+  def replacePrefix(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+    if (s.numDims < 2)
+      return None
+    var numDims2Replace : Int = (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
+    if (numDims2Replace >= s.numDims)
+      numDims2Replace -= 1
+
+    /*
+     * replacePrefix degenerates to a full replacement of the schedule if
+     * deps2CarryStrongly = s.deps!
+     */
+    var deps2CarryStrongly : Set[Dependence] = s.getDependencesCarriedUpToDim(numDims2Replace - 1)
+
+    val newSched : Schedule =
+      if (deps2CarryStrongly.isEmpty) {
+        val prefixLength : Int = Random.nextInt(numDims2Replace + 1)
+        val searchSpaceGenerators : ListBuffer[GeneratorsRat] = ListBuffer.empty
+        var uncarriedDeps : Set[Dependence] = s.deps
+        for (i : Int <- 0 until prefixLength) {
+          val coeffSpace : isl.Set = ScheduleSpaceUtils.calculateCoeffSpace(s.domInfo, uncarriedDeps, false)
+          searchSpaceGenerators.append(Util.constraints2GeneratorsRat(coeffSpace, conf.moveVertices, conf.rayPruningThreshold))
+          uncarriedDeps = uncarriedDeps.filterNot(ScheduleSpaceUtils.checkCarried(s.domInfo, coeffSpace))
+        }
+        val tmp : Schedule = new Schedule(s.domInfo, s.deps)
+        for (g : GeneratorsRat <- searchSpaceGenerators) {
+          val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = ScheduleUtils.generateScheduleVector(g,
+            conf.rayCoeffsRange, -conf.lineCoeffsRange, conf.lineCoeffsRange, conf.maxNumRays, conf.maxNumLines, conf)
+          tmp.addScheduleVector(coeffs, schedSummands)
+        }
+        tmp
+      } else {
+        ScheduleUtils.completeSchedule(new Schedule(s.domInfo, s.deps), conf.maxNumRays, conf.maxNumLines,
+          conf, 1, deps2CarryStrongly).head
+      }
+
+    for (i <- numDims2Replace until s.numDims)
+      newSched.addForeignDim(s, i)
+    val newSchedSimplified : Schedule = ScheduleUtils.simplify(newSched)
+    return Some(ScheduleUtils.expandToFullSchedule(conf, conf.maxNumRays, conf.maxNumLines, newSchedSimplified,
+      ScheduleUtils.generateLinIndepScheduleVector))
+  }
+
+  //  private def annealMutationProbability(generation: Int, originalProbability: Double): Double =
+  //    originalProbability / math.sqrt(generation)
+
+  private def annealMutationProbability(conf : ConfigGA, generation : Int, originalProbability : Double) : Double = {
+    if (conf.useConvexAnnealingFunction)
+      return originalProbability * (-math.pow((generation - 1).toDouble / conf.maxGenerationToReach, 2.0) + 1)
+    else
+      return originalProbability / math.sqrt(math.log(generation + math.E - 1))
+  }
+
+  /**
+    * Randomly mutates single dimensions of a given schedule by changing the
+    * coefficients in the linear combination of Chernikova generators that
+    * originally formed the coefficient vectors. In certain cases it becomes
+    * necessary to replace the suffix of a mutated schedule with newly generated
+    * suitable dimensions in order to preserve legality.
+    */
+  def mutateGeneratorCoeffs(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+    val newSched : Schedule = new Schedule(s.domInfo, s.deps)
+    val dimsIter : Iterator[Int] = Range(0, s.numDims).iterator
+    val currProbabilityToMutateSchedRow : Double = annealMutationProbability(conf, generation,
+      conf.probabilityToMutateSchedRow)
+    val currProbabilityToMutateGeneratorCoeff : Double = annealMutationProbability(conf, generation,
+      conf.probabilityToMutateSchedRow)
+
+    val dims2Replace : Set[Int] = Random.shuffle((0 until s.numDims).toList).take((s.numDims * currProbabilityToMutateSchedRow).ceil.toInt).toSet
+
+    while (dimsIter.hasNext && (newSched.getCarriedDeps.size < s.deps.size)) {
+      val dim : Int = dimsIter.next
+      val coeffs : List[Rat] = s.getScheduleVector(dim)
+      val schedSummands : Set[ScheduleSummand] = s.getSchedSummands(dim)
+      if (dims2Replace.contains(dim)) {
+        val vertexSummands : ArrayBuffer[VertexSummand] = new ArrayBuffer()
+        val lineSummands : ArrayBuffer[LineSummand] = new ArrayBuffer()
+        val raySummands : ArrayBuffer[RaySummand] = new ArrayBuffer()
+
+        schedSummands.map { s =>
+          {
+            s match {
+              case s1 @ VertexSummand(_, _) => vertexSummands.append(s1)
+              case s1 @ RaySummand(_, _)    => raySummands.append(s1)
+              case s1 @ LineSummand(_, _)   => lineSummands.append(s1)
+            }
+          }
+        }
+
+        val schedSummandsNew : HashSet[ScheduleSummand] = HashSet.empty
+
+        mutateVertexSummands(conf, schedSummandsNew, vertexSummands,
+          currProbabilityToMutateGeneratorCoeff)
+        mutateRaySummands(conf, schedSummandsNew, raySummands,
+          currProbabilityToMutateGeneratorCoeff)
+        mutateLineSummands(conf, schedSummandsNew, lineSummands,
+          currProbabilityToMutateGeneratorCoeff)
+
+        val zeroVect : List[Rat] = List.fill[Rat](coeffs.size)(Rat(0))
+        val coeffsNew : List[Rat] = schedSummandsNew
+          .foldLeft(zeroVect)((v : List[Rat], s : ScheduleSummand) => ScheduleVectorUtils.add(v, s.v, s.coeff))
+        newSched.addScheduleVector(coeffsNew, schedSummandsNew.toSet)
+      } else {
+        newSched.addForeignDim(s, dim)
+      }
+      val prevUncarried : Set[Dependence] =
+        if (newSched.numDims == 1)
+          Set.empty[Dependence]
+        else
+          newSched.deps -- newSched.getDependencesCarriedUpToDim(newSched.numDims - 2)
+
+      /*
+       * Given is a schedule s. s is the result of replaceSuffix for another
+       * schedule t. When building s, replaceSuffix has preserved the first i
+       * dimensions of t. Data dependency d is carried by dimension i of s and t
+       * by coincidence but not by construction. I.e. it cannot be guaranteed,
+       * that any linear combination of the generators of dimension i results in
+       * a schedule carrying d. Therefore if dimensions i and (i + 1) are both
+       * modified by muatateGeneratorCoeffs it can happen that the new dimension
+       * i does no longer carry d strongly and, as i + 1 is not required to
+       * carry d as well, i + 1 does not even carry d weakly. Therefore the new
+       * dimension i + 1 is invalid.
+       */
+      if (!prevUncarried.forall(newSched.getDependencesCarriedWeaklyByDim(newSched.numDims - 1).contains)) {
+        myLogger.warning("Generator mutation produced an invalid schedule vector.")
+        newSched.removeLastScheduleVector
+        // The completed schedule is a full schedule by definition.
+        return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, prevUncarried).head)
+      }
+    }
+    val stillUncarried : Set[Dependence] = newSched.deps -- newSched.getCarriedDeps
+    // The completed schedule is a full schedule by definition.
+    if (!stillUncarried.isEmpty)
+      return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, stillUncarried).head)
+    return Some(ScheduleUtils.expandToFullSchedule(conf, conf.maxNumRays, conf.maxNumLines, newSched,
+      ScheduleUtils.generateLinIndepScheduleVector))
+  }
+
+  private def mutateVertexSummands(conf : ConfigGA,
+    schedSummandsNew : HashSet[ScheduleSummand],
+    vertexSummands : ArrayBuffer[VertexSummand], p : Double) {
+
+    val summandsToMutate : Set[Int] = Random.shuffle((0 until vertexSummands.size).toList.take((vertexSummands.size * p).ceil.toInt)).toSet
+
+    // The sum of the new coefficients must be 1!
+    if (vertexSummands.size > 1)
+      for (i : Int <- 0 until vertexSummands.size) {
+        if (summandsToMutate.contains(i)) {
+          val vOld : VertexSummand = vertexSummands(i)
+          val cNew : Rat = getRandomCoeff(Rat(1, conf.generatorCoeffMaxDenominator), Rat(1), conf)
+          vertexSummands(i) = new VertexSummand(vOld.v, cNew)
+          var diff : Rat = Rat(1) - cNew
+          for (j : Int <- 0 until vertexSummands.size) {
+            if (j != i) {
+              val vOld1 : VertexSummand = vertexSummands(j)
+              val cNew1 : Rat =
+                if ((j == vertexSummands.size - 1) || (i == vertexSummands.size - 1 && j == i - 1))
+                  diff
+                else {
+                  val tmp : Rat = getRandomCoeff(Rat(0), diff, conf)
+                  diff -= tmp
+                  tmp
+                }
+              vertexSummands(j) = new VertexSummand(vOld1.v, cNew1)
+            }
+          }
+        }
+      }
+    vertexSummands map { (s : ScheduleSummand) => schedSummandsNew.add(s) }
+  }
+
+  private def mutateRaySummands(conf : ConfigGA,
+    schedSummandsNew : HashSet[ScheduleSummand],
+    raySummands : ArrayBuffer[RaySummand], p : Double) {
+
+    val summandsToMutate : Set[Int] = Random.shuffle((0 until raySummands.size).toList.take((raySummands.size * p).ceil.toInt)).toSet
+
+    for (i : Int <- 0 until raySummands.size) {
+      schedSummandsNew.add(if (summandsToMutate.contains(i)) {
+        val cNew : Rat = getRandomCoeff(Rat(0), Rat(conf.rayCoeffsRange), conf)
+        new RaySummand(raySummands(i).v, cNew)
+      } else
+        raySummands(i))
+    }
+  }
+
+  private def mutateLineSummands(conf : ConfigGA,
+    schedSummandsNew : HashSet[ScheduleSummand],
+    lineSummands : ArrayBuffer[LineSummand], p : Double) {
+
+    val summandsToMutate : Set[Int] = Random.shuffle((0 until lineSummands.size).toList.take((lineSummands.size * p).ceil.toInt)).toSet
+
+    for (i : Int <- 0 until lineSummands.size) {
+      schedSummandsNew.add(if (summandsToMutate.contains(i)) {
+        val cNew : Rat = getRandomCoeff(Rat(-conf.lineCoeffsRange), Rat(conf.lineCoeffsRange), conf)
+        new LineSummand(lineSummands(i).v, cNew)
+      } else
+        lineSummands(i))
+    }
+  }
+
+  private def getRandomCoeff(min : Rat, max : Rat, conf : ConfigGA) : Rat = Rat
+    .getRandomRat(min, max, conf.generatorCoeffMaxDenominator)
+}

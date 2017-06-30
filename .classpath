@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry excluding="org/exastencils/schedopt/exploration/ga/schedule/ScheduleTreeConstructionTestExecutionOrderPreservation.scala" kind="src" path="test"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="libs/scala-parser-combinators_2.11-1.0.4.jar"/>
+	<classpathentry kind="lib" path="libs/commons-lang3-3.4/commons-lang3-3.4-javadoc.jar"/>
+	<classpathentry kind="lib" path="libs/commons-lang3-3.4/commons-lang3-3.4-sources.jar"/>
+	<classpathentry kind="lib" path="libs/commons-lang3-3.4/commons-lang3-3.4.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/chernikova"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/scala-isl-utils"/>
+	<classpathentry kind="lib" path="/scala-isl-utils/libs/isl-scala.jar"/>
+	<classpathentry kind="lib" path="libs/commons-math3-3.6.1/commons-math3-3.6.1-javadoc.jar"/>
+	<classpathentry kind="lib" path="libs/commons-math3-3.6.1/commons-math3-3.6.1-sources.jar"/>
+	<classpathentry kind="lib" path="libs/commons-math3-3.6.1/commons-math3-3.6.1.jar"/>
+	<classpathentry kind="lib" path="libs/scala-library-2.11.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:platform:/resource/schedule-optimization/libs/scala-library-2.11.6-javadoc.jar!/"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

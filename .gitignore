@@ -1,0 +1,5 @@
+/bin/
+.cache-main
+.cache-tests
+tags
+/target/
