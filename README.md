@@ -127,7 +127,7 @@ The following steps describe how obtain Polyite itself and put everything togeth
 1. Get the code:
 ```bash
 cd ${BASE_DIR}
-git clone TODO
+git clone https://github.com/stganser/polyite.git
 export POLYITE_ROOT=${BASE_DIR}/polyite
 ```
 2. Download required libraries
