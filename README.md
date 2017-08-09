@@ -59,7 +59,7 @@ make
 
 ### isl Scala Bindings
 
-1. Make sure you have libgmp and libclang (both including headers) installed on your system, as well as libtool
+1. Make sure you have libgmp and libclang (version 3.8) (both including headers) installed on your system, as well as libtool
 
 2. Get and build isl
 ```bash
