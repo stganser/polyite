@@ -33,6 +33,7 @@ export LLVM_ROOT="${BASE_DIR}/llvm_root"
 
 2. Clone LLVM
 ```bash
+cd ${LLVM_ROOT}
 git clone https://github.com/stganser/llvm.git
 ```
 
@@ -223,6 +224,6 @@ numMeasurementThreads=42
 measurementCommand=srun -Aduckdonald -pthebigcluster --constraint=fastest_cpu_available_plx --mem=32768 --exclusive -t31 -n1 ${POLYITE_ROOT}/measure_polybench.bash
 ```
 It is important to use `srun`, since Polyite must be able into interactively communicate with the benchmarking script via STDIN and STDOUT. Polyite can pass
-a given [mumactl](https://github.com/numactl/numactl) configuration to the benchmarking script.
+a given [numactl](https://github.com/numactl/numactl) configuration to the benchmarking script.
 
 (C) 2017, Stefan Ganser
