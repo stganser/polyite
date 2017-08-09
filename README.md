@@ -174,6 +174,7 @@ genetic algorithm.
 ```bash
 cd ${POLYITE_ROOT}/polybench-c-4.1
 ln -s ../polybench_scripts/baselineCollectData.bash baselineCollectData.bash
+ln -s ../polybench_scripts/benchmarks.txt benchmarks.txt
 ln -s ../polybench_scripts/collectAllBaselineResults.bash collectAllBaselineResults.bash
 ln -s ../polybench_scripts/generateRefOut.bash generateRefOut.bash
 ln -s ../polybench_scripts/measureBaseline.bash measureBaseline.bash
