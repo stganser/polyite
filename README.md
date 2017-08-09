@@ -70,6 +70,7 @@ mkdir install
 export ISL_INSTALL="${PWD}/install"
 ./autogen.sh
 ./configure --prefix=${ISL_INSTALL} --with-jni-include=/usr/lib/jvm/default-java/include/ --with-clang=system
+make install
 ```
 
 3. Generate the bindings
@@ -105,8 +106,10 @@ can be used to determine a polyhedron's volume. Since we do not have Scala bindi
 ```bash
 cd ${BASE_DIR}
 git clone http://repo.or.cz/barvinok.git
+cd barvinok
 git checkout barvinok-0.39
 export BARVINOK_INSTALL=barvinok/install
+cd ${BASE_DIR}
 git clone https://github.com/stganser/barvinok_binary.git
 export BARVINOK_BINARY_ROOT=${BASE_DIR}/barvinok_binary
 ```
