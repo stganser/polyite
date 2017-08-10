@@ -160,7 +160,7 @@ function writeRandExpConf {
     echo "maxNumLines=2" >> ${output}
     echo "probabilityToCarryDep=0.4" >> ${output}
     echo "maxNumSchedsAtOnce=1" >> ${output}
-    echo "measurementCommand=${${POLYITE_LOC}}/measure_polybench.bash" >> ${output}
+    echo "measurementCommand=${POLYITE_LOC}/measure_polybench.bash" >> ${output}
     echo "measurementWorkingDir=${POLYITE_LOC}" >> ${output}
     echo "measurementTmpDirBase=/tmp/" >> ${output}
     echo "measurementTmpDirNamePrefix=${benchmarkName}_rand" >> ${output}
