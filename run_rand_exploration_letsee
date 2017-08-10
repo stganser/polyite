@@ -2,4 +2,4 @@
 ISL_UTILS_LOC="set to correct path"
 POLYITE_LOC="set to correct path"
 CHERNIKOVA_LOC="set to correct path"
-/usr/lib/jvm/java-1.8.0-openjdk-amd64/bin/java -XX:+UseG1GC -Djava.library.path=${ISL_UTILS_LOC}/libs -classpath ${POLYITE_LOC}/bin:${CHERNIKOVA_LOC}/bin:${ISL_UTILS_LOC}/bin:${HOME}/workspace/schedule-optimization/libs/scala-library-2.11.jar:${HOME}/workspace/scala-isl-utils/libs/isl-scala.jar:${POLYITE_LOC}/libs/scala-parser-combinators_2.11-1.0.4.jar polyite.MainRandSchedsLeTSeE $@
+/usr/lib/jvm/java-1.8.0-openjdk-amd64/bin/java -XX:+UseG1GC -Djava.library.path=${ISL_UTILS_LOC}/libs -classpath ${POLYITE_LOC}/bin:${CHERNIKOVA_LOC}/bin:${ISL_UTILS_LOC}/bin:${POLYITE_LOC}/libs/scala-library-2.11.jar:${ISL_UTILS_LOC}/libs/isl-scala.jar:${POLYITE_LOC}/libs/scala-parser-combinators_2.11-1.0.4.jar polyite.MainRandSchedsLeTSeE $@
