@@ -168,12 +168,15 @@ genetic algorithm.
   * The file `polly_configurations.txt` contains a list of Polly configurations
   that `prepare_benchmarks.bash` considers during the baseline measurements.
 
+Install `libpapi` version 5.4.3.
+
 7. Download [Polybench 4.1](https://sourceforge.net/projects/polybench/files/polybench-c-4.1.tar.gz/download) and unpack the archive to `${POLYITE_ROOT}/polybench-c-4.1`.
 
 8. Create symbolic links in `polybench-c-4.1`:
 ```bash
 cd ${POLYITE_ROOT}/polybench-c-4.1
 ln -s ../polybench_scripts/baselineCollectData.bash baselineCollectData.bash
+ln -s ../polybench_scripts/polly_configurations.txt polly_configurations.txt
 ln -s ../polybench_scripts/benchmarks.txt benchmarks.txt
 ln -s ../polybench_scripts/collectAllBaselineResults.bash collectAllBaselineResults.bash
 ln -s ../polybench_scripts/generateRefOut.bash generateRefOut.bash
