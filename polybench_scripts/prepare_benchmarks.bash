@@ -133,7 +133,7 @@ function writeGAConfig {
     echo "numCompilatonDurationMeasurements=0" >> ${output}
     echo "validateOutput=true" >> ${output}
     echo "tilingPermitInnerSeq=false" >> ${output}
-    echo "schedTreeSimplRebuildDimScheds=true" >> ${output}
+    echo "schedTreeSimplRebuildDimScheds=false" >> ${output}
     echo "schedTreeSimplRemoveCommonOffset=true" >> ${output}
     echo "schedTreeSimplDivideCoeffsByGCD=true" >> ${output}
     echo "schedTreeSimplElimSuperfluousSubTrees=true" >> ${output}
