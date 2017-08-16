@@ -21,9 +21,8 @@ object ConstructIslScheduleTreeVisitor {
    * number of members of that band.
    */
   private def setCoincidence(s : isl.Schedule, coincidenceFlags : List[Boolean]) : isl.Schedule = {
-    val root : isl.ScheduleNode = s.getRoot
     return s.mapScheduleNodeBottomUp((n : isl.ScheduleNode) => {
-      if (n.hasParent() && n.parent.isEqual(root) && n.getType == ScheduleNodeType.NodeBand) {
+      if (n.parent().getType == isl.ScheduleNodeType.NodeDomain) {
         assert(n.getType.equals(isl.ScheduleNodeType.NodeBand))
         coincidenceFlags.zipWithIndex.foldLeft(n)((m : isl.ScheduleNode, t : (Boolean, Int)) => {
           m.bandMemberSetCoincident(t._2, if (t._1) 1 else 0)
