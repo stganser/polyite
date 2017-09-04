@@ -22,7 +22,7 @@ object ConstructIslScheduleTreeVisitor {
    */
   private def setCoincidence(s : isl.Schedule, coincidenceFlags : List[Boolean]) : isl.Schedule = {
     return s.mapScheduleNodeBottomUp((n : isl.ScheduleNode) => {
-      if (n.parent().getType == isl.ScheduleNodeType.NodeDomain) {
+      if (n.hasParent() && n.parent().getType == isl.ScheduleNodeType.NodeDomain) {
         assert(n.getType.equals(isl.ScheduleNodeType.NodeBand))
         coincidenceFlags.zipWithIndex.foldLeft(n)((m : isl.ScheduleNode, t : (Boolean, Int)) => {
           m.bandMemberSetCoincident(t._2, if (t._1) 1 else 0)
