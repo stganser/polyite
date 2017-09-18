@@ -164,7 +164,7 @@ in `/usr/lib/jvm/java-1.8.0-openjdk-amd64/` (the default location on Debian base
 genetic algorithm.
   * In `measureBaseline.bash` set `POLLY_INSTALL_DIR` to the value of `${LLVM_ROOT}/llvm_build`.
   * In `prepare_benchmarks.bash` set `POLLY_INSTALL_DIR` to the value of `${LLVM_ROOT}/llvm_build` and `POLYITE_LOC` to the value of `{POLYITE_ROOT}`. This script can later be called to prepare a list of Polybench 4.1 benchmarks. You may want to adapt the values of the default
-  configuration files that the script generates for each benchmark. Compile `${POLYITE_ROOT}/config_help.tex` to get a documentation of Polyite's configuration options.
+  configuration files that the script generates for each benchmark. Especially, set `barvinokBinary` and `barvinokLibraryPath` to the correct value in each of the prototype configurations. Compile `${POLYITE_ROOT}/config_help.tex` to get a documentation of Polyite's configuration options.
   * The file `polly_configurations.txt` contains a list of Polly configurations
   that `prepare_benchmarks.bash` considers during the baseline measurements.
 
