@@ -5,7 +5,7 @@ POLLY_INSTALL_DIR=/home/stg/Documents/arbeit/polly/llvm_build
 opt="${POLLY_INSTALL_DIR}/bin/opt"
 llc="${POLLY_INSTALL_DIR}/bin/llc"
 echo "Started"
-nArgs=19
+nArgs=20
 function printerr {
     local s=${1}
     echo ${s} > /dev/stderr
