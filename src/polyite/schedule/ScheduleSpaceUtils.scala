@@ -675,6 +675,62 @@ object ScheduleSpaceUtils {
     result.toMap
   }
 
+  def calcMemTrafficSizesOfDepStmts(deps : Iterable[Dependence],
+    scop : ScopInfo, conf : Config) : Map[Dependence, Long] = {
+    if (memAccesses == null)
+      memAccesses = buildMemAccessMap(scop)
+    val result : HashMap[Dependence, Long] = HashMap.empty
+
+    val stmtMemTraffic : Map[String, Long] = Isl.islUnionSetGetTupleNames(scop.getDomain).map((stmt : String) => {
+      (stmt, calcMemTrafficSizeOfStmt(stmt, scop, conf, memAccesses(stmt)))
+    }).toMap
+
+    for (d <- deps) {
+      val sourceStmt : String = d.getTupleNameIn()
+      val destStmt : String = d.getTupleNameOut()
+      result.put(d, stmtMemTraffic(sourceStmt) + stmtMemTraffic(destStmt))
+    }
+    return result.toMap
+  }
+
+  private def calcMemTrafficSizeOfStmt(stmt : String, scop : ScopInfo, conf : Config, memAccesses : StmtMemAccesses) : Long = {
+    val paramVals : Map[String, Int] = conf.paramValMappings
+    val ctx : isl.Ctx = scop.getDomain.getCtx
+    val uniqueAccesses : HashMap[String, HashSet[isl.Map]] = HashMap.empty
+    val stmtDomain : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(scop.getDomain, Set(stmt)))
+    for (memLoc : String <- memAccesses.rds.keySet) {
+      if (!uniqueAccesses.contains(memLoc))
+        uniqueAccesses.put(memLoc, HashSet.empty)
+      memAccesses.rds(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access))).foreach(uniqueAccesses(memLoc).add(_))
+    }
+    for (memLoc : String <- memAccesses.wrs.keySet) {
+      if (!uniqueAccesses.contains(memLoc))
+        uniqueAccesses.put(memLoc, HashSet.empty)
+      memAccesses.wrs(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access))).foreach(uniqueAccesses(memLoc).add(_))
+    }
+    var result : Long = 0
+    for (memLoc <- uniqueAccesses.keySet) {
+      for (access <- uniqueAccesses(memLoc)) {
+        var accessed : isl.Set = stmtDomain.apply(access)
+        if (!accessed.isEmpty()) {
+          val nParam = accessed.getSpace.dim(T_PAR)
+          for (i <- 0 until nParam) {
+            val dimName : String = accessed.getDimName(T_PAR, i)
+            if (paramVals.contains(dimName))
+              accessed = accessed.fixVal(T_PAR, i, isl.Val
+                .fromInt(ctx, paramVals(dimName)))
+            else
+              // param value is unknown. make it zero allow counting of inner points
+              accessed = accessed.fixVal(T_PAR, i, isl.Val.fromInt(ctx, 0))
+          }
+        }
+        accessed = Isl.simplify(accessed)
+        result += countNPoints(accessed, conf)
+      }
+    }
+    return result
+  }
+
   private def calcTrafficSizeOfDep(dep : isl.Map, srcAccessLocs : Set[String],
     destAccessLocs : Set[String],
     srcMemLocs2MemAccesses : HashMap[String, HashSet[isl.Map]],

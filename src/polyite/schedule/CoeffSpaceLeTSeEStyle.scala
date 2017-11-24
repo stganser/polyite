@@ -310,7 +310,7 @@ object CoeffSpaceLeTSeEStyle {
 
   private def sortDeps(deps : List[Dependence], scop : ScopInfo,
     initBoundingBox : isl.Set, conf : ConfigRandLeTSeEStyle) : List[Dependence] = {
-    val dep2TrafficSize : Map[Dependence, Long] = ScheduleSpaceUtils.calcTrafficSizesOfDeps(deps,
+    val dep2TrafficSize : Map[Dependence, Long] = ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps,
       scop, conf)
     val dep2Interference : Map[Dependence, Int] = ScheduleSpaceUtils.calcInterferenceOfDeps(deps,
       initBoundingBox)
