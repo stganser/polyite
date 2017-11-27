@@ -44,11 +44,10 @@ object CoeffSpaceLeTSeEStyle {
     deps : Set[Dependence], maxNumSchedules : Int, basis : Set[Schedule],
     conf : ConfigRandLeTSeEStyle) : Option[Set[Schedule]] = {
     myLogger.info("Constructing the schedule space.")
-    val schedSpace : List[isl.Set] = constructScheduleSpace(deps, conf,
-      domInfo, scop) match {
-        case None     => return None
-        case Some(sp) => sp
-      }
+    val schedSpace : List[isl.Set] = constructScheduleSpace(deps, conf, domInfo, scop) match {
+      case None     => return None
+      case Some(sp) => sp
+    }
     val schedSpaceDual : List[GeneratorsRat] = schedSpace.zipWithIndex.map((t : (isl.Set, Int)) => {
       myLogger.info("dualizing dimension polyhedron " + t._2)
       Util.constraints2GeneratorsRat(t._1)
@@ -310,8 +309,10 @@ object CoeffSpaceLeTSeEStyle {
 
   private def sortDeps(deps : List[Dependence], scop : ScopInfo,
     initBoundingBox : isl.Set, conf : ConfigRandLeTSeEStyle) : List[Dependence] = {
-    val dep2TrafficSize : Map[Dependence, Long] = ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps,
-      scop, conf)
+    val dep2TrafficSize : Map[Dependence, Long] = if (conf.weighDepsByStmtTraffic)
+      ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps, scop, conf)
+    else
+      ScheduleSpaceUtils.calcTrafficSizesOfDeps(deps, scop, conf)
     val dep2Interference : Map[Dependence, Int] = ScheduleSpaceUtils.calcInterferenceOfDeps(deps,
       initBoundingBox)
     implicit val depOrd : Ordering[Dependence] = new Ordering[Dependence]() {

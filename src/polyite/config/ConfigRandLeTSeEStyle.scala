@@ -3,8 +3,9 @@ package polyite.config
 import java.io.File
 import java.util.Properties
 import java.util.logging.Logger
-import polyite.util.Util
-import scala.collection.mutable.HashMap
+
+import polyite.config.MinimalConfig.EvaluationStrategy
+import polyite.fitness.scikit_learn.Classifier
 import polyite.util.Rat
 
 object ConfigRandLeTSeEStyle {
@@ -27,6 +28,11 @@ object ConfigRandLeTSeEStyle {
     propName = "completeSchedules"
     val completeSchedules : Option[Boolean] = MinimalConfig.getBooleanProperty(propName, rawConf)
     if (!completeSchedules.isDefined)
+      return None
+
+    propName = "weighDepsByStmtTraffic"
+    val weighDepsByStmtTraffic : Option[Boolean] = MinimalConfig.getBooleanProperty(propName, rawConf)
+    if (!weighDepsByStmtTraffic.isDefined)
       return None
 
     return Some(new ConfigRandLeTSeEStyle(
@@ -98,7 +104,8 @@ object ConfigRandLeTSeEStyle {
       basicConf.numSchedTreeSimplDurationMeasurements,
 
       boundSchedCoeffs.get,
-      completeSchedules.get))
+      completeSchedules.get,
+      weighDepsByStmtTraffic.get))
   }
 }
 
@@ -171,7 +178,8 @@ class ConfigRandLeTSeEStyle(
   numSchedTreeSimplDurationMeasurements : Option[Int],
 
   val boundSchedCoeffs : Boolean,
-  val completeSchedules : Boolean) extends ConfigRand(
+  val completeSchedules : Boolean,
+  val weighDepsByStmtTraffic : Boolean) extends ConfigRand(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -245,6 +253,7 @@ class ConfigRandLeTSeEStyle(
 
     MinimalConfig.toStringAppend("boundSchedCoeffs", boundSchedCoeffs, sb)
     MinimalConfig.toStringAppend("completeSchedules", completeSchedules, sb)
+    MinimalConfig.toStringAppend("weighDepsByStmtTraffic", weighDepsByStmtTraffic, sb)
     return sb.toString()
   }
 }
