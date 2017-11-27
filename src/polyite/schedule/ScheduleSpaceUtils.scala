@@ -9,11 +9,6 @@ import scala.collection.mutable.HashSet
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-import polyite.ScopInfo
-import polyite.config.Config
-import polyite.util.Util
-import polyite.util.Util.GeneratorsRat
-
 import isl.Conversions.convertLambdaToVoidCallback1
 import isl.Isl
 import isl.Isl.TypeAliases.T_IN
@@ -21,6 +16,10 @@ import isl.Isl.TypeAliases.T_OUT
 import isl.Isl.TypeAliases.T_PAR
 import isl.Isl.TypeAliases.T_SET
 import isl.IslException
+import polyite.ScopInfo
+import polyite.config.Config
+import polyite.util.Util
+import polyite.util.Util.GeneratorsRat
 object ScheduleSpaceUtils {
   val myLogger : Logger = Logger.getLogger("")
   /**
@@ -675,15 +674,18 @@ object ScheduleSpaceUtils {
     result.toMap
   }
 
+  var stmtMemTraffic : Map[String, Long] = null
+
   def calcMemTrafficSizesOfDepStmts(deps : Iterable[Dependence],
     scop : ScopInfo, conf : Config) : Map[Dependence, Long] = {
     if (memAccesses == null)
       memAccesses = buildMemAccessMap(scop)
     val result : HashMap[Dependence, Long] = HashMap.empty
 
-    val stmtMemTraffic : Map[String, Long] = Isl.islUnionSetGetTupleNames(scop.getDomain).map((stmt : String) => {
-      (stmt, calcMemTrafficSizeOfStmt(stmt, scop, conf, memAccesses(stmt)))
-    }).toMap
+    if (stmtMemTraffic == null)
+      stmtMemTraffic = Isl.islUnionSetGetTupleNames(scop.getDomain).map((stmt : String) => {
+        (stmt, calcMemTrafficSizeOfStmt(stmt, scop, conf, memAccesses(stmt)))
+      }).toMap
 
     for (d <- deps) {
       val sourceStmt : String = d.getTupleNameIn()
