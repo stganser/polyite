@@ -73,9 +73,10 @@ function writeGAConfig {
     echo "probabilityToMutateSchedRow=0.1" >> ${output}
     echo "probabilityToMutateGeneratorCoeff=0.1" >> ${output}
     echo "generatorCoeffMaxDenominator=3" >> ${output}
-    echo "measurementCommand=${POLYITE_LOC}/measure_polybench.bash" >> ${output}
+    echo "measurementCommand=srun -Aanywhere -panywhere --constraint=zeus --mem=32768 --exclusive -t31 -n1 \
+--pstate-turbo=off ${POLYITE_LOC}/measure_polybench.bash" >> ${output}
     echo "measurementWorkingDir=${POLYITE_LOC}/" >> ${output}
-    echo "measurementTmpDirBase=/tmp/" >> ${output}
+    echo "measurementTmpDirBase=/local/hdd/${USER}/" >> ${output}
     echo "measurementTmpDirNamePrefix=${benchmarkName}" >> ${output}
     echo "benchmarkName=${benchmarkName}" >> ${output}
     echo "functionName=${kernelFunction}" >> ${output}
@@ -118,7 +119,7 @@ function writeGAConfig {
     echo "moveVertices=false" >> ${output}
     echo "rayPruningThreshold=NONE" >> ${output}
     echo "seqPollyOptFlags=-polly-parallel=false -polly-vectorizer=none -polly-tiling=false -polly-process-unprofitable=true" >> ${output}
-    echo "parPollyOptFlags=-polly-parallel=true -polly-vectorizer=none -polly-tiling=true -polly-default-tile-size=64 -polly-process-unprofitable=true" >> ${output}
+    echo "parPollyOptFlags=-polly-parallel=true -polly-vectorizer=none -polly-tiling=true -polly-tiling-permit-inner-seq=false -polly-default-tile-size=64 -polly-process-unprofitable=true" >> ${output}
     echo "insertSetNodes=false" >> ${output}
     echo "useConvexAnnealingFunction=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
@@ -141,7 +142,15 @@ function writeGAConfig {
     echo "barvinokBinary=${HOME}/workspace/count_integer_points/count_integer_points" >> ${output}
     echo "barvinokLibraryPath=${HOME}/workspace/barvinok/barvinok/install/lib" >> ${output}
     echo "normalizeFeatures=true" >> ${output}
-    echo "gpu=false" >> ${output}
+    echo "evaluationStrategy=CPU" >> ${output}
+    echo "learningSet=/home/stg/PycharmProjects/polyite-learning/learning_data_classified/gemm/fitness.csv" >> ${output}
+    echo "rescaleFeatures=false" >> ${output}
+    echo "decTreeMinSamplesLeaf=15" >> ${output}
+    echo "learningAlgorithm=CART" >> ${output}
+    echo "randForestNTree=100" >> ${output}
+    echo "randForestMaxFeatures=8" >> ${output}
+    echo "executionMode=SINGLE_PROCESS" >> ${output}
+    echo "pythonVEnvLocation=NONE" >> ${output}
 }
 
 function writeRandExpConf {
@@ -160,9 +169,10 @@ function writeRandExpConf {
     echo "maxNumLines=2" >> ${output}
     echo "probabilityToCarryDep=0.4" >> ${output}
     echo "maxNumSchedsAtOnce=1" >> ${output}
-    echo "measurementCommand=${POLYITE_LOC}/measure_polybench.bash" >> ${output}
+    echo "measurementCommand=srun -Aanywhere -panywhere --constraint=zeus --mem=32768 --exclusive -t31 -n1 \
+--pstate-turbo=off ${HOME}/workspace/schedule-optimization/measure_polybench.bash" >> ${output}
     echo "measurementWorkingDir=${POLYITE_LOC}" >> ${output}
-    echo "measurementTmpDirBase=/tmp/" >> ${output}
+    echo "measurementTmpDirBase=/local/hdd/${USER}/" >> ${output}
     echo "measurementTmpDirNamePrefix=${benchmarkName}_rand" >> ${output}
     echo "benchmarkName=${benchmarkName}" >> ${output}
     echo "functionName=${kernelFunction}" >> ${output}
@@ -196,7 +206,7 @@ function writeRandExpConf {
     echo "moveVertices=false" >> ${output}
     echo "rayPruningThreshold=NONE" >> ${output}
     echo "seqPollyOptFlags=-polly-parallel=false -polly-vectorizer=none -polly-tiling=false -polly-process-unprofitable=true" >> ${output}
-    echo "parPollyOptFlags=-polly-parallel=true -polly-vectorizer=none -polly-tiling=true -polly-default-tile-size=64 -polly-process-unprofitable=true" >> ${output}
+    echo "parPollyOptFlags=-polly-parallel=true -polly-vectorizer=none -polly-tiling=true -polly-tiling-permit-inner-seq=false -polly-default-tile-size=64 -polly-process-unprofitable=true" >> ${output}
     echo "insertSetNodes=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
     echo "benchmarkingSurrenderTimeout=$((2*24*60*60))" >> ${output}
@@ -219,7 +229,8 @@ function writeRandExpConf {
     echo "schedTreeSimplElimSuperfluousDimNodes=true" >> ${output}
     echo "numSchedTreeSimplDurationMeasurements=NONE" >> ${output}
     echo "normalizeFeatures=true" >> ${output}
-    echo "gpu=false" >> ${output}
+    echo "evaluationStrategy=CPU" >> ${output}
+    echo "pythonVEnvLocation=NONE" >> ${output}
 }
 
 if [ ${#} -lt 2 ]
@@ -341,6 +352,18 @@ do
         rm ${tmpLinked}
     }
 
+    function dumpAst () {
+        local pollyConfName=$1
+        local pollyConf=$2
+        local fName=$3
+        local regionId=$4
+        local output=${fName}_${regionId}_${pollyConfName}.c
+        local pollyConfGetAst="`echo ${pollyConf} | sed 's/-polly-codegen/-polly-ast/g'` -analyze -q"
+        local optLine="${opt} ${pollyConfGetAst} ${benchmarkName}.preopt.ll"
+        local jscopFile=`ls | grep ${fName} | grep ${regionId} | grep jscop`
+        ${POLYITE_LOC}/exec_order_print_prg_gen "${optLine}" ${jscopFile} ${output}
+    }
+
     generateIRAndLinkAndCanonicalize "" ${benchmarkName}.preopt.ll
     generateIRAndLinkAndCanonicalize "${timeFlag}" ${benchmarkName}.preopt.ll.time
     generateIRAndLinkAndCanonicalize "-DPOLYBENCH_DUMP_ARRAYS"\
@@ -389,6 +412,7 @@ do
         do
             pollyConfCompl="${pollyConfig} -polly-only-func=${kernelFunctionName} \
 -polly-only-region=${regionEntryPoint}"
+            dumpAst ${pollyConfigName} "${pollyConfCompl}" ${kernelFunctionName} ${regionEntryPoint}
             if [ ${generateBaseline} == "true" ]
             then
                 echo "Scheduling baseline measurement for polly configuration ${pollyConfigName}"
