@@ -494,7 +494,7 @@ object ScheduleUtils {
       case Some(sp) => sp
     }
     if (linIndepCoeffSpace.isEmpty())
-      throw new IllegalStateException("The coefficient space is empty: " + linIndepCoeffSpace)
+      return None
 
     // Randomly choose one basic set from linIndepCoeffSpace
     val linIndepBSets : isl.BasicSetList = linIndepCoeffSpace.getBasicSetList
