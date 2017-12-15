@@ -4,8 +4,6 @@ import java.io.File
 import java.util.Properties
 import java.util.logging.Logger
 
-import polyite.config.MinimalConfig.EvaluationStrategy
-import polyite.fitness.scikit_learn.Classifier
 import polyite.util.Rat
 
 object ConfigRandLeTSeEStyle {
