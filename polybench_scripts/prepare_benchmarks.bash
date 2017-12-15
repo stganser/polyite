@@ -220,7 +220,7 @@ function writeRandExpConf {
     echo "numSchedTreeSimplDurationMeasurements=NONE" >> ${output}
     echo "normalizeFeatures=true" >> ${output}
     echo "gpu=false" >> ${output}
-    echo "pythonVEnvLocation=NONE" >> ${output}
+    echo "weighDepsByStmtTraffic=true" >> ${output}
 }
 
 if [ ${#} -lt 2 ]
