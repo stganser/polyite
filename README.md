@@ -22,7 +22,7 @@ export BASE_DIR=$PWD
 ```
 
 ### Polly/LLVM
-Polyite uses an extended version Polly 3.9.1 (for the TACO'2017 we used 3.9) that is capable of importing schedule trees from our extended JSCOP format and
+Polyite uses an extended version of Polly 3.9.1 (for the TACO'2017 we used 3.9) that is capable of importing schedule trees from our extended JSCOP format and
 further transforming the imported schedules, for instance by tiling them. Therefore, you must clone LLVM, Clang and Polly from our specially provided repositories.
 
 1. Create a root directory for LLVM
