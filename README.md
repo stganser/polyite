@@ -10,7 +10,7 @@ We describe the approach in detail in our TACO'2017 article [Iterative Schedule 
 ## Legal
 Polyite is released under MIT license.
 
-Polyite depends on LLVM, Clang, Polly, isl, libbarvinok and Armin Größlinger's Chernikova implementation of Chernikova's algorithm. LLVM, Clang and Polly are released under the LLVM Release License or derivates of it. isl and Chernikova are released under MIT license. libbarvinok is GPL licensed.
+Polyite depends on LLVM, Clang, Polly, isl, libbarvinok and Armin Größlinger's implementation of Chernikova's algorithm. LLVM, Clang and Polly are released under the LLVM Release License or derivates of it. isl and Chernikova are released under MIT license. libbarvinok is GPL licensed.
 
 ## Installation and Setup
 We start from the bottom up with the dependences of Polyite and install everything inside the same directory, which could be your IDE's workspace.
