@@ -703,12 +703,12 @@ object ScheduleSpaceUtils {
     for (memLoc : String <- memAccesses.rds.keySet) {
       if (!uniqueAccesses.contains(memLoc))
         uniqueAccesses.put(memLoc, HashSet.empty)
-      memAccesses.rds(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access))).foreach(uniqueAccesses(memLoc).add(_))
+      memAccesses.rds(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access.toString()))).foreach(uniqueAccesses(memLoc).add(_))
     }
     for (memLoc : String <- memAccesses.wrs.keySet) {
       if (!uniqueAccesses.contains(memLoc))
         uniqueAccesses.put(memLoc, HashSet.empty)
-      memAccesses.wrs(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access))).foreach(uniqueAccesses(memLoc).add(_))
+      memAccesses.wrs(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access.toString()))).foreach(uniqueAccesses(memLoc).add(_))
     }
     var result : Long = 0
     for (memLoc <- uniqueAccesses.keySet) {
