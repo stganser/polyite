@@ -713,7 +713,7 @@ object ScheduleSpaceUtils {
     var result : Long = 0
     for (memLoc <- uniqueAccesses.keySet) {
       for (access <- uniqueAccesses(memLoc)) {
-        var accessed : isl.Set = stmtDomain.apply(access)
+        var accessed : isl.Set = access.intersectDomain(stmtDomain).wrap()
         if (!accessed.isEmpty()) {
           val nParam = accessed.getSpace.dim(T_PAR)
           for (i <- 0 until nParam) {
