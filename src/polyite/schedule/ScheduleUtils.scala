@@ -353,7 +353,7 @@ object ScheduleUtils {
 
       while (continue) {
         val numSchedsAtOnce : Int = scheds.synchronized {
-          math.min(Random.nextInt(conf.maxNumSchedsAtOnce + 1) + 1,
+          math.min(Random.nextInt(conf.maxNumSchedsAtOnce) + 1,
             maxNumScheds - scheds.size)
         }
         val args : Array[Any] = Array(new Schedule(domInfo, deps), maxNumRays, maxNumLines, conf, numSchedsAtOnce, deps)
