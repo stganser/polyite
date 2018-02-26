@@ -205,6 +205,6 @@ object SchedTreeUtil {
       .accept(new DivideCoeffsByGCDVisitor)
       .accept(new ElimSuperfluousSubTreesVisitor)
       .accept(new ElimSuperfluousDimNodesVisitor)
-      .accept(new GroupDimsVisitor, deps)
+      .accept(new GroupDimsVisitor, deps.map((d : Dependence) => (d, d.map.detectEqualities())).toMap)
   }
 }

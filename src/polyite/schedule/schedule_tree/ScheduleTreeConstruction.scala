@@ -134,7 +134,7 @@ object ScheduleTreeConstruction {
       if (conf.schedTreeSimplElimSuperfluousDimNodes)
         schedTree = schedTree.accept(new ElimSuperfluousDimNodesVisitor)
     }
-    schedTree = schedTree.accept(new GroupDimsVisitor, deps)
+    schedTree = schedTree.accept(new GroupDimsVisitor, deps.map((d : Dependence) => (d, d.map)).toMap)
     schedTree.accept(new InspectDomainsVisitor)
     return schedTree
   }

@@ -175,7 +175,6 @@ object ScheduleSpaceUtils {
           dep.foreachBasicMap { bmap : isl.BasicMap =>
             interm += bmap.removeDivs()
             i += 1
-            if (i > maxSplit)
               throw new PreprocessTimeoutException
           }
         } catch {

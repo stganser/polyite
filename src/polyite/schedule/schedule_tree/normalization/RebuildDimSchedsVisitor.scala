@@ -115,29 +115,8 @@ class RebuildDimSchedsVisitor extends PartialSchedMapNormalizationVisitor {
   }
 
   private def constructHappensBeforeRelations(domain : isl.UnionSet, sched : isl.UnionMap) : Iterable[isl.BasicMap] = {
-    val uMap : isl.UnionMap = constructHappensBeforeMap(domain, sched)
+    val uMap : isl.UnionMap = Isl.constructHappensBeforeMap(domain, sched)
     return sepDepsFast(uMap)
-  }
-
-  private def constructHappensBeforeMap(domain : isl.UnionSet, sched : isl.UnionMap) : isl.UnionMap = {
-    val stmts : Set[String] = Isl.islUnionSetGetTupleNames(domain)
-    var result : isl.UnionMap = isl.UnionMap.empty(sched.getSpace)
-    for (s1 : String <- stmts) {
-      for (s2 : String <- stmts) {
-        val sched1 : isl.Map = isl.Map.fromUnionMap(Isl.islUnionMapFilter(sched, Set(s1)))
-        val sched2 : isl.Map = isl.Map.fromUnionMap(Isl.islUnionMapFilter(sched, Set(s2)))
-        val dom1 : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(domain, Set(s1)))
-        val dom2 : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(domain, Set(s2)))
-        val m : isl.Map = constructHappensBeforeMap(dom1, dom2, sched1, sched2)
-        result = result.addMap(m)
-      }
-    }
-    return result
-  }
-
-  private def constructHappensBeforeMap(dom1 : isl.Set, dom2 : isl.Set, sched1 : isl.Map, sched2 : isl.Map) : isl.Map = {
-    val result : isl.Map = isl.Map.fromDomainAndRange(dom1, dom2)
-    return result.addConstraint(Isl.buildHappensBeforeConstrFromMaps(dom1, dom2, sched1, sched2))
   }
 
   // this is derived from Pluto+ -> Bondhugula2016
