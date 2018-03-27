@@ -188,9 +188,10 @@ object SchedTreeUtil {
       case NodeLeaf => return true
       case NodeSequence => {
         for (i : Int <- 0 until n.nChildren())
-          if (n.getChild(i).getType != NodeLeaf)
+          if (child.getChild(i).getChild(0).getType != NodeLeaf) {
             return false
-        return true
+          }
+        return allowInnerSeq
       }
       case _ => return false
     }
