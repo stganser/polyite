@@ -35,10 +35,10 @@ import java.io.File
 object Schedule {
 
   /**
-    * Filters {@code deps} for dependencies that are carried strongly by the
+    * Filters {@code deps} for dependencies that are satisfied strongly by the
     * schedule given through the coefficient matrix {@code coeffs}.
     */
-  private def getDepsCarriedBySchedule(coeffs : List[BigInt],
+  private def getDepsStronglySatisfiedBySchedule(coeffs : List[BigInt],
     deps : Set[Dependence], domInfo : DomainCoeffInfo) : Set[Dependence] = {
     deps.filter { d : Dependence =>
       //Util.islSetContains(d.strongConstr, coeffs.toArray)
@@ -48,10 +48,10 @@ object Schedule {
   }
 
   /**
-    * Filters {@code deps} for dependencies that are carried weakly by the
+    * Filters {@code deps} for dependencies that are satisfied weakly by the
     * schedule given through the coefficient matrix {@code coeffs}.
     */
-  private def getDepsWeaklyCarriedBySchedule(coeffs : List[BigInt],
+  private def getDepsWeaklySatisfiedBySchedule(coeffs : List[BigInt],
     deps : Set[Dependence], domInfo : DomainCoeffInfo) : Set[Dependence] = {
     deps.filter { d : Dependence =>
       //Util.islSetContains(d.weakConstr, coeffs.toArray)
@@ -124,7 +124,7 @@ object Schedule {
 class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   private var scheduleSummands : ArrayBuffer[Set[ScheduleSummand]] = new ArrayBuffer()
   private var scheduleVectors : ArrayBuffer[List[Rat]] = new ArrayBuffer()
-  private var dim2CarriedDeps : ArrayBuffer[Set[Dependence]] = ArrayBuffer.empty
+  private var dim2StronglySatisfiedDeps : ArrayBuffer[Set[Dependence]] = ArrayBuffer.empty
   private var strRepr : String = null
   private var schedMap : isl.UnionMap = null
 
@@ -134,7 +134,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   override def clone() : Schedule = {
     val copy = new Schedule(domInfo, deps)
     copy.scheduleVectors = scheduleVectors.clone
-    copy.dim2CarriedDeps = dim2CarriedDeps.clone()
+    copy.dim2StronglySatisfiedDeps = dim2StronglySatisfiedDeps.clone()
     copy.scheduleSummands = scheduleSummands.clone
     copy.strRepr = strRepr
     copy.schedMap = schedMap
@@ -183,7 +183,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   def addScheduleVector(coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) {
     scheduleSummands.append(schedSummands)
     scheduleVectors.append(coeffs)
-    updateCarriedDependences(scheduleVectors.length - 1)
+    updateStronglySatisfiedDependences(scheduleVectors.length - 1)
     strRepr = null
     schedMap = null
   }
@@ -198,22 +198,22 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
         + o.numDims + "): " + otherDim)
     scheduleSummands.append(o.scheduleSummands(otherDim))
     scheduleVectors.append(o.scheduleVectors(otherDim))
-    updateCarriedDependences(scheduleVectors.length - 1)
+    updateStronglySatisfiedDependences(scheduleVectors.length - 1)
     strRepr = null
     schedMap = null
   }
 
   /* 
-   * Bookkeeping of the dependences that are carried strongly by each schedule
-   * dimension and up to each schedule dimension.
+   * Bookkeeping of the dependences that are satisfied strongly by each schedule
+   * dimension.
    */
-  private def updateCarriedDependences(dim : Int) {
+  private def updateStronglySatisfiedDependences(dim : Int) {
     val schedCoeffs : List[BigInt] = ScheduleVectorUtils.multiplyWithCommonDenominator(scheduleVectors(dim))
-    val carriedDeps : Set[Dependence] = Schedule.getDepsCarriedBySchedule(schedCoeffs, deps, domInfo)
-    if (dim2CarriedDeps.size == dim)
-      dim2CarriedDeps.append(carriedDeps)
+    val carriedDeps : Set[Dependence] = Schedule.getDepsStronglySatisfiedBySchedule(schedCoeffs, deps, domInfo)
+    if (dim2StronglySatisfiedDeps.size == dim)
+      dim2StronglySatisfiedDeps.append(carriedDeps)
     else
-      dim2CarriedDeps(dim) = carriedDeps
+      dim2StronglySatisfiedDeps(dim) = carriedDeps
   }
 
   /**
@@ -224,7 +224,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       val lastIdx : Int = numDims - 1
       scheduleSummands.remove(lastIdx)
       scheduleVectors.remove(lastIdx)
-      dim2CarriedDeps.remove(lastIdx)
+      dim2StronglySatisfiedDeps.remove(lastIdx)
       strRepr = null
       schedMap = null
     }
@@ -251,7 +251,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleSummands(dim) = schedSummands
     scheduleVectors(dim) = coeffs
     val intCoeffs = ScheduleVectorUtils.multiplyWithCommonDenominator(coeffs)
-    updateCarriedDependences(dim)
+    updateStronglySatisfiedDependences(dim)
     strRepr = null
     schedMap = null
   }
@@ -269,7 +269,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
         + o.numDims + "): " + otherDim)
     scheduleSummands(myDim) = o.scheduleSummands(otherDim)
     scheduleVectors(myDim) = o.scheduleVectors(otherDim)
-    updateCarriedDependences(myDim)
+    updateStronglySatisfiedDependences(myDim)
     strRepr = null
     schedMap = null
   }
@@ -339,32 +339,32 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   def getDependencesCarriedUpToDim(dim : Int) : Set[Dependence] = {
     var result : Set[Dependence] = Set.empty
     for (i <- 0 until dim + 1) {
-      result ++= dim2CarriedDeps(i)
+      result ++= dim2StronglySatisfiedDeps(i)
     }
     return result
   }
 
   /**
-    * Returns the set of dependences that are carried strongly by dimension {@code dim}.
+    * Returns the set of dependences that are satisfied strongly by dimension {@code dim}.
     */
-  def getDependencesCarriedByDim(dim : Int) : Set[Dependence] = dim2CarriedDeps(dim)
+  def getDependencesSatisfiedStronglyByDim(dim : Int) : Set[Dependence] = dim2StronglySatisfiedDeps(dim)
 
   /**
     * Returns the set of dependences that are carried weakly by dimension {@code dim}.
     */
-  def getDependencesCarriedWeaklyByDim(dim : Int) : Set[Dependence] = {
+  def getDependencesSatisfiedWeaklyByDim(dim : Int) : Set[Dependence] = {
     val coeffs : List[BigInt] = ScheduleVectorUtils.multiplyWithCommonDenominator(scheduleVectors(dim))
-    return Schedule.getDepsWeaklyCarriedBySchedule(coeffs, deps, domInfo)
+    return Schedule.getDepsWeaklySatisfiedBySchedule(coeffs, deps, domInfo)
   }
 
   /**
-    * Information about the set of dependences that are carried strongly by each
+    * Information about the set of dependences that are satisfied strongly by each
     * dimension.
     */
-  def getDependencesCarriedByDims : IndexedSeqView[Set[Dependence], scala.collection.mutable.ArrayBuffer[Set[Dependence]]] = dim2CarriedDeps.view
+  def getDependencesSatisfiedByDims : IndexedSeqView[Set[Dependence], scala.collection.mutable.ArrayBuffer[Set[Dependence]]] = dim2StronglySatisfiedDeps.view
 
   /**
-    * Returns the set of all dependences that are carried strongly by this
+    * Returns the set of all dependences that are carried by this
     * schedule.
     */
   def getCarriedDeps : Set[Dependence] = {
@@ -422,12 +422,12 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   }
 
   /**
-    * Check whether the 1-d schedule given through the schedule coeffcients
-    * {@code schedCoeffs} would carry strongly any dependences that have not
-    * already been carried strongly by this schedule.
+    * Check whether the 1-d schedule given through the schedule coefficients
+    * {@code schedCoeffs} would satisfy strongly any dependences that have not
+    * already been carried by this schedule.
     */
   def carriesNewDependency(schedCoeffs : List[Rat]) : Boolean = {
-    !Schedule.getDepsCarriedBySchedule(ScheduleVectorUtils.multiplyWithCommonDenominator(schedCoeffs), deps, domInfo)
+    !Schedule.getDepsStronglySatisfiedBySchedule(ScheduleVectorUtils.multiplyWithCommonDenominator(schedCoeffs), deps, domInfo)
       .subsetOf(getDependencesCarriedUpToDim(numDims - 1))
   }
 
@@ -438,14 +438,14 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   def carriesNewDependency(dim : Int) : Boolean = !getDepsNewlyCarriedBy(dim).isEmpty
 
   /**
-    * Returns the set of dependences that are carried stronly by dimension {@code dim}
+    * Returns the set of dependences that are satisfied stronly by dimension {@code dim}
     * and have not been carried before by any other dimension.
     */
   def getDepsNewlyCarriedBy(dim : Int) : Set[Dependence] = {
     if (dim > 0)
-      getDependencesCarriedByDim(dim) -- getDependencesCarriedUpToDim(dim - 1)
+      getDependencesSatisfiedStronglyByDim(dim) -- getDependencesCarriedUpToDim(dim - 1)
     else
-      getDependencesCarriedByDim(dim)
+      getDependencesSatisfiedStronglyByDim(dim)
   }
 
   /**

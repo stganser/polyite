@@ -47,7 +47,7 @@ object CrossoverStrategies {
     var dep2Dim : Map[Dependence, Set[Int]] = Map.empty[Dependence, Set[Int]]
     for (d : Dependence <- sched.deps) {
       for (i <- 0 until sched.numDims) {
-        if (sched.getDependencesCarriedByDim(i).contains(d)) {
+        if (sched.getDependencesSatisfiedStronglyByDim(i).contains(d)) {
           if (dep2Dim.contains(d)) {
             val oldSet = dep2Dim(d)
             dep2Dim -= d

@@ -249,7 +249,7 @@ object MutationStrategies {
        * carry d as well, i + 1 does not even carry d weakly. Therefore the new
        * dimension i + 1 is invalid.
        */
-      if (!prevUncarried.forall(newSched.getDependencesCarriedWeaklyByDim(newSched.numDims - 1).contains)) {
+      if (!prevUncarried.forall(newSched.getDependencesSatisfiedWeaklyByDim(newSched.numDims - 1).contains)) {
         myLogger.warning("Generator mutation produced an invalid schedule vector.")
         newSched.removeLastScheduleVector
         // The completed schedule is a full schedule by definition.
