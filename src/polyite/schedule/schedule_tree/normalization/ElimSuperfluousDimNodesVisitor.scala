@@ -41,7 +41,7 @@ class ElimSuperfluousDimNodesVisitor extends ScheduleNodeVisitorLeaveNDegUnchang
     }
     if (canEliminate)
       return t.getChild.accept(this)
-    return new DimNode(t.getDomain, t.getSched, t.getChild.accept(this))
+    return new DimNode(t.getDomain, t.getSched, t.getChild.accept(this), t.getCoeffMatrDims)
   }
 
   private def handleBandNodes : ScheduleNode = throw new UnsupportedOperationException("Operation is not implemented for BandNodes.")

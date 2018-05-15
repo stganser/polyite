@@ -27,7 +27,7 @@ object ElimSuperfluousSubTreesVisitor {
       val schedPrefix : isl.UnionMap = Isl.buildMultiDimUnionMap(schedPrefixList)
 
       if (schedPrefix.isInjective())
-        return new LeafNode(n.getDomain)
+        return new LeafNode(n.getDomain, List(n.getFather.getCoeffMatrDims.last))
       return constr()
     }
   }
@@ -82,10 +82,12 @@ class ElimSuperfluousSubTreesVisitor extends ScheduleNodeVisitor[ScheduleNode] {
   def visit(n : SimpleBandNode) : ScheduleNode = {
     val schedPrefixList : List[isl.UnionMap] = ElimSuperfluousSubTreesVisitor.getSchedulePrefix(n)
     val (bandReduced : List[(isl.UnionMap, Boolean)], injective) = handleBand(schedPrefixList, n.getScheds, n.getDomain)
-    if (injective)
-      return new SimpleBandNode(n.getDomain, bandReduced, new LeafNode(n.getDomain))
-    else
-      return new SimpleBandNode(n.getDomain, n.getScheds, n.getChild.accept(this))
+    if (injective) {
+      val coeffMatrDimsReduced : List[Int] = n.getCoeffMatrDims.take(bandReduced.length)
+      return new SimpleBandNode(n.getDomain, bandReduced, new LeafNode(n.getDomain, List(coeffMatrDimsReduced.last)),
+          coeffMatrDimsReduced)
+    } else
+      return new SimpleBandNode(n.getDomain, n.getScheds, n.getChild.accept(this), n.getCoeffMatrDims)
   }
   
   def visit(n : BandNodeLoop) : ScheduleNode = {
@@ -93,29 +95,33 @@ class ElimSuperfluousSubTreesVisitor extends ScheduleNodeVisitor[ScheduleNode] {
     val (bandReduced : List[(isl.UnionMap, Boolean)], injective) = handleBand(schedPrefixList, n.getScheds, n.getDomain)
     if (injective) {
       val loopsReduced : List[Map[String, Boolean]] = n.getLoop.take(bandReduced.size)
-      return new BandNodeLoop(n.getDomain, bandReduced, new LeafNode(n.getDomain), loopsReduced)
+      val coeffMatrDimsReduced : List[Int] = n.getCoeffMatrDims.take(bandReduced.length)
+      return new BandNodeLoop(n.getDomain, bandReduced, new LeafNode(n.getDomain, List(coeffMatrDimsReduced.last)),
+          loopsReduced, coeffMatrDimsReduced)
     } else {
-      return new BandNodeLoop(n.getDomain, n.getScheds, n.getChild.accept(this), n.getLoop)
+      return new BandNodeLoop(n.getDomain, n.getScheds, n.getChild.accept(this), n.getLoop, n.getCoeffMatrDims)
     }
   }
 
   def visit(n : DimNode) : ScheduleNode = {
     def constr() : ScheduleNode = {
-      return new DimNode(n.getDomain, n.getSched, n.getChild.accept(this))
+      return new DimNode(n.getDomain, n.getSched, n.getChild.accept(this), n.getCoeffMatrDims)
     }
     return ElimSuperfluousSubTreesVisitor.handleNode(n, constr)
   }
 
   def visit(n : SetNode) : ScheduleNode = {
     def constr() : ScheduleNode = {
-      return new SetNode(n.getDomain, n.getChildren.map((t : (Set[String], ScheduleNode)) => (t._1, t._2.accept(this))))
+      return new SetNode(n.getDomain, n.getChildren.map((t : (Set[String], ScheduleNode)) => (t._1, t._2.accept(this))),
+          n.getCoeffMatrDims)
     }
     return ElimSuperfluousSubTreesVisitor.handleNode(n, constr)
   }
 
   def visit(n : SeqNode) : ScheduleNode = {
     def constr() : ScheduleNode = {
-      return new SeqNode(n.getDomain, n.getChildren.map((t : (Set[String], ScheduleNode)) => (t._1, t._2.accept(this))))
+      return new SeqNode(n.getDomain, n.getChildren.map((t : (Set[String], ScheduleNode)) => (t._1, t._2.accept(this))), 
+          n.getCoeffMatrDims)
     }
     return ElimSuperfluousSubTreesVisitor.handleNode(n, constr)
   }

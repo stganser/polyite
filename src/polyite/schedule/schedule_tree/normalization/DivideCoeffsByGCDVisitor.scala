@@ -16,11 +16,11 @@ class DivideCoeffsByGCDVisitor extends ScheduleNodeVisitorLeaveNDegUnchanged {
 
   def visit(n : DimNode) : ScheduleNode = {
     val newSched : isl.UnionMap = Util.divideCoeffsByGcd(n.getSched)
-    return new DimNode(n.getDomain, newSched, n.getChild.accept(this))
+    return new DimNode(n.getDomain, newSched, n.getChild.accept(this), n.getCoeffMatrDims)
   }
 
   def visit(n : SimpleBandNode) : ScheduleNode = {
-    return new SimpleBandNode(n.getDomain, transformBand(n.getScheds), n.getChild.accept(this))
+    return new SimpleBandNode(n.getDomain, transformBand(n.getScheds), n.getChild.accept(this), n.getCoeffMatrDims)
   }
 
   private def transformBand(origScheds : List[(isl.UnionMap, Boolean)]) : List[(isl.UnionMap, Boolean)] = {
@@ -28,7 +28,7 @@ class DivideCoeffsByGCDVisitor extends ScheduleNodeVisitorLeaveNDegUnchanged {
   }
 
   def visit(n : BandNodeLoop) : ScheduleNode = {
-    return new BandNodeLoop(n.getDomain, transformBand(n.getScheds), n.getChild.accept(this), n.getLoop)
+    return new BandNodeLoop(n.getDomain, transformBand(n.getScheds), n.getChild.accept(this), n.getLoop, n.getCoeffMatrDims)
   }
 
   def visit(n : LeafNode) : ScheduleNode = n

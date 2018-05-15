@@ -175,7 +175,7 @@ object ScheduleTreeConstruction {
 
     // Are we at the bottom of the schedule tree?
     if (currDim == schedDims.length)
-      return new LeafNode(currDomain)
+      return new LeafNode(currDomain, List(currDim - 1))
 
     // Do not reduce the schedule to the current statements right away.
     // Otherwise it doesn't correspond to domInfo
@@ -203,7 +203,7 @@ object ScheduleTreeConstruction {
             (part, buildBasicScheduleTree(currDim, schedDims, part, domain, context, domInfo, currDeps, insertSetNodes,
               splitLoopBodies))
           }).toSet
-          return new SetNode(currDomain, children)
+          return new SetNode(currDomain, children, List(currDim))
         }
       }
 
@@ -220,7 +220,7 @@ object ScheduleTreeConstruction {
           (part, buildBasicScheduleTree(currDim, schedDims, part, domain, context, domInfo, depsUncarried, insertSetNodes,
             splitLoopBodies))
         }).toList
-        (new SeqNode(currDomain, children), deleteConst(currSchedReduced))
+        (new SeqNode(currDomain, children, List(currDim)), deleteConst(currSchedReduced))
       } else {
         (buildBasicScheduleTree(currDim + 1, schedDims, sttmts, domain, context, domInfo, depsUncarried, insertSetNodes,
           splitLoopBodies),
@@ -228,7 +228,7 @@ object ScheduleTreeConstruction {
       }
 
       // this is a regular schedule dimension
-      return new DimNode(currDomain, currSchedReduced2, child)
+      return new DimNode(currDomain, currSchedReduced2, child, List(currDim))
     }
 
     // The current schedule node is a sequence node
@@ -236,7 +236,7 @@ object ScheduleTreeConstruction {
       (part, buildBasicScheduleTree(currDim, schedDims, part, domain, context, domInfo, currDeps, insertSetNodes,
         splitLoopBodies))
     }).toList
-    return new SeqNode(currDomain, children)
+    return new SeqNode(currDomain, children, List(currDim))
   }
 
   private def deleteConst(sched : isl.UnionMap) : isl.UnionMap = {

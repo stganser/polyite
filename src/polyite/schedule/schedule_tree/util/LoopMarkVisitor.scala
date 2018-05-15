@@ -1,8 +1,17 @@
 package polyite.schedule.schedule_tree.util
 
+import java.util.logging.Logger
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
+import isl.Conversions.convertBigIntegerToBigInt
+import isl.Conversions.convertLambdaToVoidCallback1
+import isl.Conversions.convertLambdaToVoidCallback2
+import isl.Isl
+import isl.Isl.TypeAliases.T_IN
+import isl.IslException
+import polyite.config.Config
 import polyite.schedule.schedule_tree.BandNode
 import polyite.schedule.schedule_tree.BandNodeLoop
 import polyite.schedule.schedule_tree.DimNode
@@ -11,13 +20,11 @@ import polyite.schedule.schedule_tree.ParamScheduleNodeVisitor
 import polyite.schedule.schedule_tree.ScheduleNode
 import polyite.schedule.schedule_tree.SeqNode
 import polyite.schedule.schedule_tree.SetNode
-
-import isl.Conversions.convertBigIntegerToBigInt
-import isl.Conversions.convertLambdaToVoidCallback1
-import isl.Conversions.convertLambdaToVoidCallback2
-import isl.Isl
-import isl.Isl.TypeAliases.T_IN
 import polyite.schedule.schedule_tree.SimpleBandNode
+
+object LoopMarkVisitor {
+  val myLogger : Logger = Logger.getLogger("")
+}
 
 /**
   * Mark dimensions of band nodes that actually produce loops. This transforms instances of {@code BandNode} into
@@ -30,13 +37,13 @@ class LoopMarkVisitor extends ParamScheduleNodeVisitor[ScheduleNode, Map[String,
   def visit(n : DimNode, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = throw new UnsupportedOperationException("The LoopMarkVisitor cannot process DimNodes.")
 
   def visit(n : SeqNode, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = {
-    val newChildren = n.getChildren.map(f => (f._1, f._2.accept(this, coeffMatrices)))
-    return new SeqNode(n.getDomain, newChildren)
+    val newChildren : List[(Set[String], ScheduleNode)] = n.getChildren.map(f => (f._1, f._2.accept(this, coeffMatrices)))
+    return new SeqNode(n.getDomain, newChildren, n.getCoeffMatrDims)
   }
 
   def visit(n : SetNode, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = {
-    val newChildren = n.getChildren.map(f => (f._1, f._2.accept(this, coeffMatrices)))
-    return new SetNode(n.getDomain, newChildren)
+    val newChildren : Set[(Set[String], ScheduleNode)] = n.getChildren.map(f => (f._1, f._2.accept(this, coeffMatrices)))
+    return new SetNode(n.getDomain, newChildren, n.getCoeffMatrDims)
   }
 
   def handleBandNode(n : BandNode, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = {
@@ -80,13 +87,11 @@ class LoopMarkVisitor extends ParamScheduleNodeVisitor[ScheduleNode, Map[String,
       }
       loop.append(loopMap.toMap)
     }
-
-    return new BandNodeLoop(n.getDomain, n.getScheds, n.getChild.accept(this, coeffMatricesNew), loop.toList)
+    val newChild : ScheduleNode = n.getChild.accept(this, coeffMatricesNew)
+    return new BandNodeLoop(n.getDomain, n.getScheds, newChild, loop.toList, n.getCoeffMatrDims)
   }
 
-  def visit(n : SimpleBandNode, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = handleBandNode(n,
-    coeffMatrices)
+  def visit(n : SimpleBandNode, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = handleBandNode(n, coeffMatrices)
 
-  def visit(n : BandNodeLoop, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = handleBandNode(n,
-    coeffMatrices)
+  def visit(n : BandNodeLoop, coeffMatrices : Map[String, List[Array[BigInt]]]) : ScheduleNode = handleBandNode(n, coeffMatrices)
 }

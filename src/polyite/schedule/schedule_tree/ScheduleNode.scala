@@ -6,12 +6,14 @@ import isl.Isl.TypeAliases.T_IN
 trait ScheduleNode {
   protected var father : ScheduleNode = null
   protected var domain : isl.UnionSet = null
+  protected var coeffMatrDims : List[Int] = null
   def setFather(father : ScheduleNode) {
     this.father = father
   }
   def isRoot : Boolean = father == null
   def getFather : ScheduleNode = father
   def getDomain : isl.UnionSet = domain
+  def getCoeffMatrDims : List[Int] = coeffMatrDims
 
   /* 
      * schedule for given statements from root until this node. Fails if stmts is not a subset of the
@@ -28,10 +30,11 @@ class SeqNode private () extends ScheduleNode {
 
   private var children : List[(Set[String], ScheduleNode)] = null
 
-  def this(domain : isl.UnionSet, children : List[(Set[String], ScheduleNode)]) = {
+  def this(domain : isl.UnionSet, children : List[(Set[String], ScheduleNode)], coeffMatrDims : List[Int]) = {
     this()
     this.domain = domain
     this.children = children
+    this.coeffMatrDims = coeffMatrDims
     children.foreach((t : (Set[String], ScheduleNode)) => t._2.setFather(this))
   }
 
@@ -57,6 +60,7 @@ class SeqNode private () extends ScheduleNode {
       var equal = this.isRoot == oSeqNode.isRoot
       equal &&= this.domain.isEqual(oSeqNode.domain)
       equal &&= this.children.size == oSeqNode.children.size
+      equal &&= this.coeffMatrDims == oSeqNode.coeffMatrDims
       return equal && this.children.zip(oSeqNode.children).forall(t => t._1.equals(t._2))
     }
     return false
@@ -66,6 +70,7 @@ class SeqNode private () extends ScheduleNode {
     val prime : Int = 13
     var hash : Int = this.domain.toString().hashCode()
     hash = hash * prime + this.children.hashCode()
+    hash = hash * prime + this.coeffMatrDims.hashCode()
     return hash
   }
 
@@ -83,10 +88,12 @@ class SetNode private () extends ScheduleNode {
 
   private var children : Set[(Set[String], ScheduleNode)] = null
 
-  def this(domain : isl.UnionSet, children : Set[(Set[String], ScheduleNode)]) = {
+  def this(domain : isl.UnionSet, children : Set[(Set[String], ScheduleNode)], coeffMatrDims : List[Int]) = {
     this()
     this.domain = domain
     this.children = children
+    this.coeffMatrDims = coeffMatrDims
+
     children.foreach((t : (Set[String], ScheduleNode)) => t._2.setFather(this))
   }
 
@@ -118,6 +125,7 @@ class SetNode private () extends ScheduleNode {
       var equal = this.isRoot == oSetNode.isRoot
       equal &&= this.domain.isEqual(oSetNode.domain)
       equal &&= this.children.size == oSetNode.children.size
+      equal &&= this.coeffMatrDims.equals(oSetNode.coeffMatrDims)
       if (equal) {
         val myChildrenSorted : List[(Set[String], ScheduleNode)] = this.children.toList.sorted
         val otherChildrenSorted : List[(Set[String], ScheduleNode)] = oSetNode.children.toList.sorted
@@ -131,6 +139,7 @@ class SetNode private () extends ScheduleNode {
     val prime : Int = 13
     var hash : Int = this.domain.toString().hashCode()
     hash = hash * prime + this.children.hashCode()
+    hash = hash * prime + this.coeffMatrDims.hashCode()
     return hash
   }
 
@@ -149,11 +158,12 @@ class DimNode private () extends ScheduleNode {
   private var sched : isl.UnionMap = null
   private var child : ScheduleNode = null
 
-  def this(domain : isl.UnionSet, sched : isl.UnionMap, child : ScheduleNode) = {
+  def this(domain : isl.UnionSet, sched : isl.UnionMap, child : ScheduleNode, coeffMatrDims : List[Int]) = {
     this()
     this.domain = domain
     this.sched = sched
     this.child = child
+    this.coeffMatrDims = coeffMatrDims
     child.setFather(this)
   }
 
@@ -188,6 +198,7 @@ class DimNode private () extends ScheduleNode {
       equal &&= this.domain.isEqual(oDimNode.domain)
       equal &&= this.sched.isEqual(oDimNode.sched)
       equal &&= this.child.equals(oDimNode.child)
+      equal &&= this.coeffMatrDims.equals(oDimNode.coeffMatrDims)
       return equal
     }
     return false
@@ -198,6 +209,7 @@ class DimNode private () extends ScheduleNode {
     var hash : Int = this.domain.toString().hashCode
     hash = hash * prime + this.sched.toString().hashCode()
     hash = hash * prime + this.child.hashCode
+    hash = hash * prime + this.coeffMatrDims.hashCode()
     return hash
   }
 
@@ -213,9 +225,10 @@ class DimNode private () extends ScheduleNode {
 
 class LeafNode private () extends ScheduleNode {
 
-  def this(domain : isl.UnionSet) = {
+  def this(domain : isl.UnionSet, coeffMatrDims : List[Int]) = {
     this()
     this.domain = domain
+    this.coeffMatrDims = coeffMatrDims
   }
 
   def getSchedulePrefix(stmts : Set[String]) : List[isl.UnionMap] = {
@@ -235,7 +248,8 @@ class LeafNode private () extends ScheduleNode {
   override def equals(o : Any) : Boolean = {
     if (o.isInstanceOf[LeafNode]) {
       val oLeafNode : LeafNode = o.asInstanceOf[LeafNode]
-      return this.domain.isEqual(oLeafNode.domain)
+      val equal = coeffMatrDims.equals(oLeafNode.coeffMatrDims)
+      return equal && this.domain.isEqual(oLeafNode.domain)
     }
     return false
   }
@@ -243,6 +257,7 @@ class LeafNode private () extends ScheduleNode {
   override def hashCode() : Int = {
     val prime : Int = 13
     var hash : Int = domain.toString().hashCode()
+    hash = hash * prime + coeffMatrDims.hashCode()
     return hash
   }
 
@@ -255,11 +270,12 @@ abstract class BandNode private () extends ScheduleNode {
   protected var scheds : List[(isl.UnionMap, Boolean)] = null
 
   def this(domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)],
-    child : ScheduleNode) = {
+    child : ScheduleNode, coeffMatrDims : List[Int]) = {
     this()
     this.domain = domain
     this.child = child
     this.scheds = scheds
+    this.coeffMatrDims = coeffMatrDims
     child.setFather(this)
   }
 
@@ -287,6 +303,7 @@ abstract class BandNode private () extends ScheduleNode {
       if (this.scheds.size == oBandNode.scheds.size) {
         var equal : Boolean = this.domain.isEqual(oBandNode.domain)
         equal &&= this.scheds.zip(oBandNode.scheds).forall(t => t._1._1.isEqual(t._2._1) && (t._1._2 == t._2._2))
+        equal &&= this.coeffMatrDims.equals(oBandNode.coeffMatrDims)
         return equal && this.child.equals(oBandNode.child)
       }
     }
@@ -296,6 +313,7 @@ abstract class BandNode private () extends ScheduleNode {
   override def hashCode() : Int = {
     val prime : Int = 13
     var hash : Int = this.domain.toString().hashCode()
+    hash = hash * prime + this.coeffMatrDims.hashCode()
     hash = hash * prime + this.scheds.map(t => (t._1.toString(), t._2)).hashCode()
     return hash
   }
@@ -314,27 +332,27 @@ abstract class BandNode private () extends ScheduleNode {
 }
 
 class SimpleBandNode(domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)],
-    child : ScheduleNode) extends BandNode(domain, scheds, child) {
+    child : ScheduleNode, coeffMatrDims : List[Int]) extends BandNode(domain, scheds, child, coeffMatrDims) {
 
   def accept[T](v : ScheduleNodeVisitor[T]) : T = v.visit(this)
 
   def accept[T, P](v : ParamScheduleNodeVisitor[T, P], param : P) : T = v.visit(this, param)
 }
 
-class BandNodeLoop private (domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)], child : ScheduleNode)
-    extends BandNode(domain, scheds, child) {
+class BandNodeLoop private (domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)], child : ScheduleNode, coeffMatrDims : List[Int])
+    extends BandNode(domain, scheds, child, coeffMatrDims) {
   // additional info
   private var loop : List[Map[String, Boolean]] = null
 
-  def this(bn : BandNode, loop : List[Map[String, Boolean]]) = {
-    this(bn.getDomain, bn.getScheds, bn.getChild)
+  def this(bn : BandNode, loop : List[Map[String, Boolean]], coeffMatrDims : List[Int]) = {
+    this(bn.getDomain, bn.getScheds, bn.getChild, coeffMatrDims)
     this.loop = loop
     child.setFather(this)
   }
 
   def this(domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)],
-    child : ScheduleNode, loop : List[Map[String, Boolean]]) = {
-    this(domain, scheds, child)
+    child : ScheduleNode, loop : List[Map[String, Boolean]], coeffMatrDims : List[Int]) = {
+    this(domain, scheds, child, coeffMatrDims)
     this.loop = loop
     child.setFather(this)
   }
@@ -443,14 +461,14 @@ trait ScheduleNodeVisitorLeaveNDegUnchanged extends ScheduleNodeVisitor[Schedule
     val newChildren : List[(Set[String], ScheduleNode)] = n.getChildren.map((t : (Set[String], ScheduleNode)) => {
       (t._1, t._2.accept(this))
     })
-    return new SeqNode(n.getDomain, newChildren)
+    return new SeqNode(n.getDomain, newChildren, n.getCoeffMatrDims)
   }
 
   def visit(n : SetNode) : ScheduleNode = {
     val newChildren : Set[(Set[String], ScheduleNode)] = n.getChildren.map((t : (Set[String], ScheduleNode)) => {
       (t._1, t._2.accept(this))
     })
-    return new SetNode(n.getDomain, newChildren)
+    return new SetNode(n.getDomain, newChildren, n.getCoeffMatrDims)
   }
 }
 
@@ -460,13 +478,13 @@ trait ParamScheduleNodeVisitorLeaveNDegUnchanged[P] extends ParamScheduleNodeVis
     val newChildren : List[(Set[String], ScheduleNode)] = n.getChildren.map((t : (Set[String], ScheduleNode)) => {
       (t._1, t._2.accept(this, p))
     })
-    return new SeqNode(n.getDomain, newChildren)
+    return new SeqNode(n.getDomain, newChildren, n.getCoeffMatrDims)
   }
 
   def visit(n : SetNode, p : P) : ScheduleNode = {
     val newChildren : Set[(Set[String], ScheduleNode)] = n.getChildren.map((t : (Set[String], ScheduleNode)) => {
       (t._1, t._2.accept(this, p))
     })
-    return new SetNode(n.getDomain, newChildren)
+    return new SetNode(n.getDomain, newChildren, n.getCoeffMatrDims)
   }
 }
