@@ -350,7 +350,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   def getDependencesSatisfiedStronglyByDim(dim : Int) : Set[Dependence] = dim2StronglySatisfiedDeps(dim)
 
   /**
-    * Returns the set of dependences that are carried weakly by dimension {@code dim}.
+    * Returns the set of dependences that are satisfied weakly by dimension {@code dim}.
     */
   def getDependencesSatisfiedWeaklyByDim(dim : Int) : Set[Dependence] = {
     val coeffs : List[BigInt] = ScheduleVectorUtils.multiplyWithCommonDenominator(scheduleVectors(dim))
@@ -432,7 +432,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   }
 
   /**
-    * Check whether dimension {@code dim} carries dependences that are not carried
+    * Check whether dimension {@code dim} strongly satisfied dependences that are not carried
     * by previous dimensions.
     */
   def carriesNewDependency(dim : Int) : Boolean = !getDepsNewlyCarriedBy(dim).isEmpty
