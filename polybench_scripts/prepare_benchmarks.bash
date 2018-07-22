@@ -26,15 +26,11 @@ function extractRegionBoundaries {
 }
 
 function getRegionList {
-    local llFile=$1
-    local scopsDescTmp=/tmp/scops_desc_tmp
-    ${opt} ${pollyAAFlags} -polly-scops \
--polly-only-func=${kernelFunctionName} -polly-dependences-computeout=0 \
-${llFile} -q -analyze > ${scopsDescTmp}
-
-    regionsTmp=/tmp/regions_tmp
-    cat ${scopsDescTmp} | grep -P '^\s*Region: ' | sed 's/\s*Region: //g' > ${regionsTmp}
-    rm ${scopsDescTmp}
+  regionsTmp=/tmp/regions_tmp
+  for f in *jscop
+  do
+    grep -P '\"name\" : \".* => .*\",' < ${f} | sed -r 's/\s+\"name\"\s:\s\"(.*)\s=>\s(.*)\",/%\1---%\2/g'
+  done > ${regionsTmp}
 }
 
 function getScopSize {
@@ -69,7 +65,7 @@ function writeGAConfig {
     echo "maxNumRays=2" >> ${output}
     echo "maxNumLines=2" >> ${output}
     echo "probabilityToCarryDep=0.4" >> ${output}
-    echo "maxNumSchedsAtOnce=1" >> ${output}
+    echo "maxNumSchedsAtOnce=2" >> ${output}
     echo "probabilityToMutateSchedRow=0.1" >> ${output}
     echo "probabilityToMutateGeneratorCoeff=0.1" >> ${output}
     echo "generatorCoeffMaxDenominator=3" >> ${output}
@@ -117,8 +113,8 @@ function writeGAConfig {
     echo "initPopulationNumRays=2" >> ${output}
     echo "moveVertices=false" >> ${output}
     echo "rayPruningThreshold=NONE" >> ${output}
-    echo "seqPollyOptFlags=-polly-parallel=false -polly-vectorizer=none -polly-tiling=false -polly-process-unprofitable=true" >> ${output}
-    echo "parPollyOptFlags=-polly-parallel=true -polly-vectorizer=none -polly-tiling=true -polly-default-tile-size=64 -polly-process-unprofitable=true" >> ${output}
+    echo "seqPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=false -mllvm -polly-tiling=false -mllvm -polly-vectorizer=none  -mllvm -polly-dependences-computeout=0 -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
+    echo "parPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=true -mllvm -polly-tiling=true -mllvm -polly-default-tile-size=64 -mllvm -polly-vectorizer=none -mllvm -polly-dependences-computeout=0 -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
     echo "insertSetNodes=false" >> ${output}
     echo "useConvexAnnealingFunction=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
@@ -159,7 +155,7 @@ function writeRandExpConf {
     echo "maxNumRays=2" >> ${output}
     echo "maxNumLines=2" >> ${output}
     echo "probabilityToCarryDep=0.4" >> ${output}
-    echo "maxNumSchedsAtOnce=1" >> ${output}
+    echo "maxNumSchedsAtOnce=2" >> ${output}
     echo "measurementCommand=${POLYITE_LOC}/measure_polybench.bash" >> ${output}
     echo "measurementWorkingDir=${POLYITE_LOC}" >> ${output}
     echo "measurementTmpDirBase=/tmp/" >> ${output}
@@ -195,8 +191,8 @@ function writeRandExpConf {
     echo "boundSchedCoeffs=true" >> ${output}
     echo "moveVertices=false" >> ${output}
     echo "rayPruningThreshold=NONE" >> ${output}
-    echo "seqPollyOptFlags=-polly-parallel=false -polly-vectorizer=none -polly-tiling=false -polly-process-unprofitable=true" >> ${output}
-    echo "parPollyOptFlags=-polly-parallel=true -polly-vectorizer=none -polly-tiling=true -polly-tiling-permit-inner-seq=false -polly-default-tile-size=64 -polly-process-unprofitable=true" >> ${output}
+    echo "seqPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=false -mllvm -polly-tiling=false -mllvm -polly-vectorizer=none -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
+    echo "parPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=true -mllvm -polly-tiling=true -mllvm -polly-default-tile-size=64 -mllvm -polly-vectorizer=none -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
     echo "insertSetNodes=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
     echo "benchmarkingSurrenderTimeout=$((2*24*60*60))" >> ${output}
@@ -348,11 +344,13 @@ do
      ${benchmarkName}.preopt.ll.dump_arrays
     generateIRAndLinkAndCanonicalize ${papiFlag} ${benchmarkName}.preopt.ll.papi
 
+    echo "Copying benchmark source files for ${benchmarkName}."
+    cp ../${benchmarkPath}/${benchmarkName}.* ../utilities/polybench.c ../utilities/polybench.h .
+
     getKernelFuncName
 
     echo "Exporting the JSCOP file(s) for ${benchmarkName}"
-    ${opt} ${pollyAAFlags} -polly-export-jscop -polly-only-func=${kernelFunctionName} ${benchmarkName}.preopt.ll \
--analyze -q > /dev/null
+    ${polly} -march=native -O3 -mllvm -polly -mllvm -polly-export -mllvm -polly-only-func=${kernelFunctionName} -mllvm -polly-dependences-computeout=0 -mllvm -polly-optimizer=none -I. -DPOLYBENCH_USE_C99_PROTO -D${dataSetSize} polybench.c ${benchmarkName}.c -o /dev/null
 
     if [ ${genRefOutput} == "true" ]
     then
@@ -373,13 +371,14 @@ do
     fi
 
     echo "Generating the baseline for ${benchmarkName}."
-    getRegionList "${benchmarkName}.preopt.ll"
+    getRegionList
+    polybenchDFlags="-DPOLYBENCH_USE_C99_PROTO -D${dataSetSize}"
     if [ ${generateBaseline} == "true" ]
     then
         binaryCount=0
         echo "Scheduling baseline measurement for O3"
         binaryCount=$((binaryCount + 1))
-        printf "${benchmarkName};_;_;O3;;${useNumactl};${numactlConfig}\n" > baselineMeasurementTasks
+        printf "${benchmarkName};_;_;O3;${polybenchDFlags};${useNumactl};${numactlConfig}\n" > baselineMeasurementTasks
     fi
 
     while read region
@@ -388,8 +387,9 @@ do
         getKernelFuncName
         while read pollyConfigName pollyConfig
         do
-            pollyConfCompl="${pollyConfig} -polly-only-func=${kernelFunctionName} \
--polly-only-region=${regionEntryPoint}"
+            pollyConfCompl="${pollyConfig} -mllvm -polly-only-func=${kernelFunctionName} \
+-mllvm -polly-only-region=${regionEntryPoint} ${polybenchDFlags}"
+            dumpAst ${pollyConfigName} "${pollyConfCompl}" ${kernelFunctionName} ${regionEntryPoint}
             if [ ${generateBaseline} == "true" ]
             then
                 echo "Scheduling baseline measurement for polly configuration ${pollyConfigName}"
@@ -422,7 +422,9 @@ while read benchmarkName benchmarkPath benchmarkSrc dataSetSize
 do
     echo "Adding ${benchmarkName} to ${benchmarkConfigs}."
     getKernelFuncName
-    getRegionList "${benchmarkName}/${benchmarkName}.preopt.ll"
+    cd ${benchmarkName}
+    getRegionList
+    cd ..
 
     # extract the data set sizes
     paramValMappings=`cpp -I utilities -I${benchmarkPath} ${benchmarkSrc} -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO | sed -ne '/int main/,$p' | grep -P 'int [A-Za-z0-9-_]+ = ' | sed -r 's/int ([A-Za-z0-9_]+) = ([0-9]+);/\1=\2/g' | xargs | sed -r 's/\s+/,/g'`

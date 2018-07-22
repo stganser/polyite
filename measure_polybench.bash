@@ -1,8 +1,8 @@
 #!/bin/bash
 #POLLY_INSTALL_DIR=/scratch/ganser/polly
 POLLY_INSTALL_DIR=/home/stg/Documents/arbeit/polly/llvm_build
-#opt="${POLLY_INSTALL_DIR}/bin/opt -load ${POLLY_INSTALL_DIR}/lib/LLVMPolly.so"
 opt="${POLLY_INSTALL_DIR}/bin/opt"
+polly="${POLLY_INSTALL_DIR}/bin/clang"
 llc="${POLLY_INSTALL_DIR}/bin/llc"
 echo "Started"
 nArgs=20
@@ -84,9 +84,16 @@ then
     numactlConf=${!i}
 fi
 irFile="${irFilesLocation}/${benchmarkName}/${benchmarkName}.preopt.ll"
+sourceLocation="${irFilesLocation}/${benchmarkName}"
 irFileTime="${irFile}.time"
 irFileValidateOutput="${irFile}.dump_arrays"
 irFilePapi="${irFile}.papi"
+
+polybenchH="${sourceLocation}/polybench.h"
+polybenchC="${sourceLocation}/polybench.c"
+benchmarkH="${sourceLocation}/${benchmarkName}.h"
+benchmarkC="${sourceLocation}/${benchmarkName}.c"
+
 # validate args 1
 if [ ! -d ${tmpDirBase} ] || [ ! -w ${tmpDirBase} ] || [ ! -x ${tmpDirBase} ]
 then
@@ -138,29 +145,21 @@ if [ ${useNumactl} == "true" ]
 then
     checkStringNotEmpty ${numactlConf} "numactlConf"
 fi
-for f in ${irFile} ${irFileTime} ${irFileValidateOutput}
+for f in ${irFile} ${irFileTime} ${irFileValidateOutput} ${polybenchH} ${polybenchC} ${benchmarkH} ${benchmarkC}
 do
     if [ ! -r ${f} ]
     then
-        printerr "IR file ${f} cannot be read."
+        printerr "File ${f} cannot be read."
         exit 1
     fi
 done
+
 if [ ! -r ${referenceOutputFile} ]
 then
     printerr "${referenceOutputFile} is not a readable file."
     exit 1
 fi
 region="%${scopRegionStart}---%${scopRegionEnd}"
-pollyAAFlags='-basicaa -scev-aa'
-pollyFuncRegionFlags="-polly-only-func=${functionName} -polly-only-region=${scopRegionStart}"
-${opt} ${pollyAAFlags} -polly-scops ${pollyFuncRegionFlags} -analyze -q ${irFile} \
-| grep 'Region:' | grep ${region} > /dev/null
-if [ $? -ne 0 ]
-then
-    printerr "The region ${region} is not a valid SCoP."
-    exit 0
-fi
 # create the tmp dir
 workingDir="${measurementTmpDirNamePrefix}_schedule-opt-worker${workerThreadID}"
 tmpDir="${tmpDirBase}/${workingDir}"
@@ -194,13 +193,16 @@ do
     echo ${line} >> ${jscopFile}
 done
 # test whether the schedule is valid
-${opt} ${pollyAAFlags} -polly-import-jscop -polly-import-jscop-read-schedule-tree=true \
-${pollyFuncRegionFlags} -analyze ${irFile} > schedImportOut 2>&1 &
+pollyFuncRegionFlags="-mllvm -polly-only-func=${functionName} -mllvm -polly-only-region=${scopRegionStart}"
+pollyFlags="-mllvm -polly -mllvm -polly-import -mllvm -polly-optimizer=none \
+-mllvm -polly-import-jscop-read-schedule-tree=true ${pollyFuncRegionFlags}"
+
+${polly} -march=native -O3 ${pollyFlags} ${seqPollyOptFlags} -mllvm -polly-code-generator=none ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -lpapi -o /dev/null  > schedImportOut 2>&1 &
 pid=$!
 wait ${pid}
 if [ $? -ne 0 ]
 then
-    printerr 'Failed to execute opt'
+    printerr 'POLLY failed'
     while read line
     do
         printerr ${line}
@@ -229,20 +231,15 @@ function checkExecutableExists {
     fi
 }
 function compile {
-    local ir=$1
-    local prefix=$2
-    local makeParallel=$3
-    local pollyFlags="-S ${pollyAAFlags} -polly-import-jscop \
--polly-import-jscop-read-schedule-tree=true -polly-codegen ${pollyFuncRegionFlags}"
+    local prefix=$1
+    local makeParallel=$2
+    local polybenchFlags=$3
     if [ ${makeParallel} == "true" ]
     then
         pollyFlags="${pollyFlags} ${parPollyOptFlags}"
     else
         pollyFlags="${pollyFlags} ${seqPollyOptFlags}"
     fi
-    pollyFlags="${pollyFlags} -march=native"
-    local optLLFile="${prefix}.opt.ll"
-    local optLLFileO3="${prefix}.optO3.ll"
     # Polly
     # measure the duration of code generation
     unset compileDurations
@@ -251,15 +248,15 @@ function compile {
     do
         if [ ${useNumactl} == "true" ]
         then
-            /usr/bin/time -f%e -ocompileTimeOut numactl ${numactlConf} ${opt} ${pollyFlags} ${ir} > /dev/null &
+            /usr/bin/time -f%e -ocompileTimeOut numactl ${numactlConf} ${polly} -march=native -O3 ${pollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -o /dev/null &
         else
-            /usr/bin/time -f%e -ocompileTimeOut ${opt} ${pollyFlags} ${ir} > /dev/null &
+            /usr/bin/time -f%e -ocompileTimeOut ${polly} -march=native -O3 ${pollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -o /dev/null &
         fi
         pid=$!
 	    wait ${pid}
 	    if [ $? -ne 0 ]
 	    then
-	        printerr 'OPT failed'
+	        printerr 'POLLY failed'
 	        echo 'false'
 	        cleanupAndExit 1
 	    fi
@@ -267,44 +264,12 @@ function compile {
 	    compileDurations[${i}]=${currCompileDuration}
 	    rm compileTimeOut
     done
-    ${opt} ${pollyFlags} ${ir} > ${optLLFile} &
+    ${polly} -march=native -O3 ${pollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -lpapi -o ${prefix} &
     pid=$!
     wait ${pid}
     if [ $? -ne 0 ]
     then
-        printerr 'OPT failed'
-        echo 'false'
-        cleanupAndExit 1
-    fi
-    checkFileExists ${optLLFile}
-    # O3
-    ${opt} -march=native -O3 < ${optLLFile} > ${optLLFileO3} &
-    pid=$!
-    wait ${pid}
-    if [ $? -ne 0 ]
-    then
-        printerr 'OPT -O3 failed'
-        echo 'false'
-        cleanupAndExit 1
-    fi
-    checkFileExists ${optLLFileO3}
-    sFile=${prefix}.opt.s
-    ${llc} ${optLLFileO3} -o ${sFile} &
-    pid=$!
-    wait ${pid}
-    if [ $? -ne 0 ]
-    then
-        printerr 'LLC failed'
-        echo 'false'
-        cleanupAndExit 1
-    fi
-    checkFileExists ${sFile}
-    gcc-5 ${sFile} -lgomp -lm -lpapi -o ${prefix} &
-    pid=$!
-    wait ${pid}
-    if [ $? -ne 0 ]
-    then
-        printerr 'GCC failed'
+        printerr 'POLLY failed'
         echo 'false'
         cleanupAndExit 1
     fi
@@ -318,29 +283,29 @@ cacheHitRateMeasureBinarySeq='cache-hit-measure_seq'
 cacheHitRateMeasureBinaryPar='cache-hit-measure_par'
 if [ ${measureParExecTime} == "true" ]
 then
-    compile ${irFileTime} ${timeMeasureBinaryPar} true
+    compile ${timeMeasureBinaryPar} true "-DPOLYBENCH_TIME"
     parCompileDurations=${compileDurations[*]}
     if [ ${validateOutputEnabled} == "true" ]
     then
-        compile ${irFileValidateOutput} ${arrayDumpBinaryPar} true
+        compile ${arrayDumpBinaryPar} true "-DPOLYBENCH_DUMP_ARRAYS"
     fi
 fi
 if [ ${measureSeqExecTime} == "true" ]
 then
-    compile ${irFileTime} ${timeMeasureBinarySeq} false
+    compile ${timeMeasureBinarySeq} false "-DPOLYBENCH_TIME"
     seqCompileDurations=${compileDurations[*]}
     if [ ${validateOutputEnabled} == "true" ]
     then
-        compile ${irFileValidateOutput} ${arrayDumpBinarySeq} false
+        compile ${arrayDumpBinarySeq} false "-DPOLYBENCH_DUMP_ARRAYS"
     fi
 fi
 if [ ${measureCacheHitRatePar} == "true" ]
 then
-    compile ${irFilePapi} ${cacheHitRateMeasureBinaryPar} true
+    compile ${cacheHitRateMeasureBinaryPar} true "-DPOLYBENCH_PAPI"
 fi
 if [ ${measureCacheHitRateSeq} == "true" ]
 then
-    compile ${irFilePapi} ${cacheHitRateMeasureBinarySeq} false
+    compile ${cacheHitRateMeasureBinarySeq} false "-DPOLYBENCH_PAPI"
 fi
 echo 'true'
 if [ ${measureParExecTime} == "true" ]

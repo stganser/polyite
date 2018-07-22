@@ -68,25 +68,9 @@ fi
 
 function compile {
     local binaryName=$1
-    local llFile=$2
-${opt} ${optFlags} ${llFile} | ${opt} -march=native -O3 > ${binaryName}.opt.ll
+    local polybenchFlags=$2
+    ${polly} -march=native -O3 ${optFlags} ${polybenchFlags} -I. polybench.c ${benchmarkName}.c -lm -lgomp -o${binaryName}
     if [ $? -ne 0 ]
-    then
-        # compilation failed.
-          echo "compile error" >> ${outputFile}
-          exit 0
-    fi
-    
-    ${llc} ${binaryName}.opt.ll -o ${binaryName}.s
-	if [ $? -ne 0 ]
-	then
-	    # compilation failed.
-	      echo "compile error" >> ${outputFile}
-	      exit 0
-	fi
-	
-	gcc ${binaryName}.s -lgomp -lm -o ${binaryName}
-	if [ $? -ne 0 ]
     then
         # compilation failed.
           echo "compile error" >> ${outputFile}
@@ -95,10 +79,10 @@ ${opt} ${optFlags} ${llFile} | ${opt} -march=native -O3 > ${binaryName}.opt.ll
 }
 
 # compile the time measurement binary
-compile "${binaryTime}" "${benchmarkName}.preopt.ll.time"
+compile "${binaryTime}" "-DPOLYBENCH_TIME"
 
 # compile the output validation binary.
-compile "${binaryDumpArrays}" "${benchmarkName}.preopt.ll.dump_arrays"
+compile "${binaryDumpArrays}" "-DPOLYBENCH_DUMP_ARRAYS"
 
 # validate output
 tmpDumpFile=${tmpDir}/baseline_tmp_dumpfile_${tmpFileSuffix}
