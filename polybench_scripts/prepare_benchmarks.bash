@@ -118,7 +118,7 @@ function writeGAConfig {
     echo "insertSetNodes=false" >> ${output}
     echo "useConvexAnnealingFunction=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
-    echo "benchmarkingSurrenderTimeout=$((2*24*60*60))" >> ${output}
+    echo "benchmarkingSurrenderTimeout=$((20*60))" >> ${output}
     echo "measureCacheHitRatePar=false" >> ${output}
     echo "measureCacheHitRateSeq=false" >> ${output}
     echo "seed=NONE" >> ${output}
@@ -195,7 +195,7 @@ function writeRandExpConf {
     echo "parPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=true -mllvm -polly-tiling=true -mllvm -polly-default-tile-size=64 -mllvm -polly-vectorizer=none -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
     echo "insertSetNodes=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
-    echo "benchmarkingSurrenderTimeout=$((2*24*60*60))" >> ${output}
+    echo "benchmarkingSurrenderTimeout=$((20*60))" >> ${output}
     echo "measureCacheHitRatePar=false" >> ${output}
     echo "measureCacheHitRateSeq=false" >> ${output}
     echo "seed=NONE" >> ${output}

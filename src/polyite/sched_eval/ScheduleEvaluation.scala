@@ -278,7 +278,7 @@ object ScheduleEvaluation {
     val timeout : Option[Double] = conf.benchmarkingSurrenderTimeout
     val start = System.currentTimeMillis()
     def timeElapsed : Double = (System.currentTimeMillis() - start) / 1000
-    def retry : Boolean = !bp.isDefined && timeout.isDefined && timeout.get <= timeElapsed
+    def retry : Boolean = !bp.isDefined && timeout.isDefined && timeElapsed <= timeout.get
     do {
       bp = startBenchmarkingProcess(conf, workerId, logPrefix)
       if (retry)
