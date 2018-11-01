@@ -497,126 +497,6 @@ object Util {
 
   implicit def vec2List[T](v : Vector[T]) : List[T] = v.toList
 
-  case class GeneratorsRat(vertices : List[List[Rat]], rays : List[List[Rat]], lines : List[List[Rat]]) {
-    override def toString() : String = {
-      val sb : StringBuilder = StringBuilder.newBuilder
-
-      def mkGeneratorsList(l : List[List[Rat]]) : String = {
-        return l.map((v : List[Rat]) => v.mkString("(", ", ", ")")).mkString("{ ", ",\n\t", " }")
-      }
-
-      sb.append("vertices : ")
-      sb.append(mkGeneratorsList(vertices))
-      sb.append("\nrays : ")
-      sb.append(mkGeneratorsList(rays))
-      sb.append("\nlines : ")
-      sb.append(mkGeneratorsList(lines))
-      return sb.toString()
-    }
-  }
-
-  /**
-    * Converts the given set of generators into vectors of rational numbers.
-    * @return An instance of {@code GeneratorsProcessed}.
-    */
-  def preprocess(g : Generators) : GeneratorsRat = {
-    def bigInt2Rat(v : Vector[BigInt]) : List[Rat] = (v map (Rat(_)))
-    val vertices : List[List[Rat]] = g.vertices.toList map {
-      (v : (Chernikova.V, BigInt)) =>
-        (v._1 map {
-          c => Rat(c, v._2)
-        }).toList
-    }
-    val rays : List[List[Rat]] = g.rays.toList.map(bigInt2Rat)
-    val lines : List[List[Rat]] = g.lines.toList.map(bigInt2Rat)
-    return GeneratorsRat(vertices, rays, lines)
-  }
-
-  /**
-    * Converts the given Isl set to its dual representation. Throws an
-    * {@code IllegalStateException} if no or more than one set of generators
-    * results.
-    *
-    * @param mvVertices Optionally, vertices can be moved such that they have only integer coordinates.
-    * @param coordinateThreshold rays and lines with coordinates whose absolute value is larger than {@code coordinateThreshold}
-    * are pruned. If {@code coordinateThreshold == None} pruning is disabled.
-    */
-  def constraints2GeneratorsRat(s : isl.Set, mvVertices : Boolean, coordinateThreshold : Option[Rat]) : GeneratorsRat = {
-    var gs : GeneratorsRat = preprocess(constraints2Generators(s))
-    if (mvVertices)
-      gs = moveVertices(gs, s)
-    if (coordinateThreshold.isDefined)
-      gs = pruneRaysAndLines(gs, coordinateThreshold.get)
-    return gs
-  }
-
-  /**
-    * Converts the given Isl set to its dual representation. Throws an
-    * {@code IllegalStateException} if no or more than one set of generators
-    * results.
-    */
-  def constraints2GeneratorsRat(s : isl.Set) : GeneratorsRat = constraints2GeneratorsRat(s, false, None)
-
-  def constraints2Generators(s : isl.Set) : Generators = {
-    val gs : Set[Generators] = Chernikova.constraintsToGenerators(s.detectEqualities().removeRedundancies())
-    if (gs.size == 1)
-      return gs.head
-    else
-      throw new IllegalStateException("expected exactly one set of generators: " + gs.size)
-  }
-
-  /**
-    * Replaces rational coefficients of vertices with (close-by) integer coefficients. This prevents large coefficients
-    * in schedule coefficients vectors. Some of the integer coefficients may change as well.
-    */
-  def moveVertices(gs : GeneratorsRat, constraints : isl.Set) : GeneratorsRat = {
-    val verticesNew : List[List[Rat]] = (for (v : List[Rat] <- gs.vertices) yield {
-      val dims2Replace : Set[Int] = v.zipWithIndex.filterNot(_._1.isInteger).map(_._2).toSet
-      if (dims2Replace.isEmpty)
-        v
-      else {
-        val ls : isl.LocalSpace = isl.LocalSpace.fromSpace(constraints.getSpace)
-        val ctx : isl.Ctx = constraints.getCtx
-        var s : isl.Set = (0 until v.length).foldLeft(constraints)((constr : isl.Set, i : Int) => {
-          if (dims2Replace.contains(i)) {
-            constr
-          } else {
-            val withIFixed : isl.Set = constr.fixVal(T_SET, i, isl.Val.fromBigInteger(ctx, v(i).intCeil.bigInteger))
-            if (withIFixed.isEmpty())
-              constr
-            else
-              withIFixed
-          }
-        })
-        assert(!s.isEmpty())
-        s = dims2Replace.foldLeft(s)((constr : isl.Set, i : Int) => {
-          val c : Rat = v(i)
-          val neighboringInts : List[BigInteger] = List(c.intCeil.bigInteger, c.intFloor.bigInteger).sorted
-          val limitedToFst : isl.Set = constr.fixVal(T_SET, i, isl.Val.fromBigInteger(ctx, neighboringInts.head))
-          if (!limitedToFst.isEmpty())
-            limitedToFst
-          else {
-            val limitedToSnd : isl.Set = constr.fixVal(T_SET, i, isl.Val.fromBigInteger(ctx, neighboringInts(1)))
-            if (!limitedToSnd.isEmpty())
-              limitedToSnd
-            else
-              constr
-          }
-        })
-        assert(!s.isEmpty())
-        islPoint2RatList(s.samplePoint())
-      }
-    }).toList
-    return GeneratorsRat(verticesNew, gs.rays, gs.lines)
-  }
-
-  private def pruneRaysAndLines(gs : GeneratorsRat, coordinateThreshold : Rat) : GeneratorsRat = {
-    def checkKeep(g : List[Rat]) : Boolean = g.forall { _.abs <= coordinateThreshold }
-    val raysNew : List[List[Rat]] = gs.rays.filter(checkKeep)
-    val linesNew : List[List[Rat]] = gs.lines.filter(checkKeep)
-    return GeneratorsRat(gs.vertices, raysNew, linesNew)
-  }
-
   /**
     * Converts an {@code isl.Point} into a list of rational numbers.
     */
@@ -632,7 +512,8 @@ object Util {
     * {@code V} and a key {@code k} of type {@code K1}. If {@code parentMap} contains a map for {@code k}, this map is
     * returned. Otherwise a new empty map {@code K2 -> V} is inserted into {@code parentMap} and is returned.
     */
-  def getOrCreateSubMap[K1, K2, V](parentMap : HashMap[K1, HashMap[K2, V]],
+  def getOrCreateSubMap[K1, K2, V](
+    parentMap : HashMap[K1, HashMap[K2, V]],
     k : K1) : HashMap[K2, V] = {
     if (parentMap.contains(k))
       return parentMap(k)
@@ -766,21 +647,105 @@ object Util {
     * Calculates the unbiased sample standard deviation of the given values.
     */
   def standardDeviation(values : Iterable[Double]) : Double = math.sqrt(variance(values))
-  
+
   /**
-   * Calculates the standard error of the given values (assuming that the values come from a normally distributed population)
-   */
+    * Calculates the standard error of the given values (assuming that the values come from a normally distributed population)
+    */
   def standardError(values : Iterable[Double]) : Double = standardDeviation(values) / math.sqrt(values.size)
-  
+
   /**
-   * Calculates the relative standard error of the given values (assuming that the values come from a normally distributed population)
-   */
+    * Calculates the relative standard error of the given values (assuming that the values come from a normally distributed population)
+    */
   def relativeStandardError(values : Iterable[Double]) : Double = (standardDeviation(values) / math.sqrt(values.size)) / mean(values)
-  
+
   /**
     * Calculates the variance coefficient of the given values.
     */
   def varianceCoeff(values : Iterable[Double]) : Double = standardDeviation(values) / mean(values)
+
+  /**
+    * This function chooses uniformly from the given options.
+    *
+    * The number of options is the length of the List. The elements
+    * in the List containing propabilities as {@code Rat}.
+    *
+    * @return uniform random List index
+    */
+  def selectRandom[A](options : List[(Rat, A)]) : A = {
+    assert(options.foldLeft(Rat(0))((a : Rat, b : (Rat, A)) => a + b._1) == Rat(1), options.foldLeft(Rat(0))((a : Rat, b : (Rat, A)) => a + b._1))
+    var gcV : BigInt = options.map { x => x._1.denominator }.fold(BigInt(1))((x, y) => x * y)
+    val random = Util.getNextRandomBigInt(gcV)
+    val it = options.iterator
+    var sum = BigInt(0)
+    while (it.hasNext) {
+      val next = it.next()
+      val v : BigInt = next._1.numerator * (gcV / next._1.denominator)
+      sum = sum + v
+      if (random < sum) {
+        return next._2
+      }
+    }
+    throw new Exception("Something terribly went wrong. Reboot your mind! Tried to select random number between 0 and "
+      + gcV + ", just selected " + random + ". Options were " + options.toString())
+  }
+
+  /**
+    * Calculates the row-echelon form of a given matrix
+    * @param m matrix in row major order
+    * @param nRows m's number of rows
+    * @param nCols m's number of columns
+    */
+  def calcRowEchelonForm(m : Array[Array[Rat]], nRows : Int, nCols : Int) : Array[Array[Rat]] = {
+    if (m.size != nRows)
+      throw new IllegalArgumentException(f"m is not a matrix with ${nRows} rows.")
+    if ((0 until nRows).exists((i : Int) => m(i).size != nCols))
+      throw new IllegalArgumentException(f"m is not a rectangular array with ${nCols} elements per rows.")
+    val res : Array[Array[Rat]] = new Array(nRows)
+    for (i <- 0 until nRows) {
+      res(i) = new Array(nCols)
+      for (j <- 0 until nCols)
+        res(i)(j) = m(i)(j)
+    }
+
+    var h = 0
+    var k = 0
+
+    def argmax(f : Int => Rat, domain : List[Int]) : Int = {
+      return (domain.foldLeft((domain.head, Rat(Int.MinValue)))((t : (Int, Rat), i : Int) => {
+        if (f(i) > t._2)
+          (i, f(i))
+        else
+          t
+      }))._1
+    }
+
+    while (h < nRows && k < nCols) {
+      val iMax = argmax(res(_)(k).abs, (h until nRows).toList)
+      if (res(iMax)(k) == Rat(0))
+        k += 1
+      else {
+        val tmp : Array[Rat] = res(h)
+        res(h) = res(iMax)
+        res(iMax) = tmp
+        for (i <- h + 1 until nRows) {
+          val f = res(i)(k) / res(h)(k)
+          res(i)(k) = Rat(0)
+          for (j <- k + 1 until nCols)
+            res(i)(j) = res(i)(j) - res(h)(j) * f
+        }
+        h = h + 1
+        k = k + 1
+      }
+    }
+    return res
+  }
+
+  /**
+    * Calculate the row rank of the given matrix in row-echelon form.
+    */
+  def calcRowRank(m : Array[Array[Rat]]) : Int = {
+    m.count(!_.forall(_ == Rat(0)))
+  }
 
   def main(args : Array[String]) : Unit = {
     //    val ctx : isl.Ctx = Isl.ctx

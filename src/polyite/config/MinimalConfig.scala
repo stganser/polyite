@@ -8,6 +8,9 @@ import polyite.util.Rat
 import polyite.util.Util
 import polyite.util.ParseArgs
 import scala.collection.mutable.HashMap
+import polyite.config.MinimalConfig.EvaluationStrategy
+import polyite.fitness.scikit_learn.Classifier
+import polyite.fitness.Feature
 
 /**
   * MinimalConfig is the basic type for configurations in the search based schedule
@@ -30,6 +33,18 @@ object MinimalConfig {
 
   object RandLimit extends NumGeneratorsLimit {
     override def toString() : String = "RAND"
+  }
+
+  object EvaluationStrategy extends Enumeration {
+    val CPU, GPU, CLASSIFIER, CLASSIFIER_AND_CPU, CLASSIFIER_AND_GPU = Value
+  }
+
+  object SamplingStrategy extends Enumeration {
+    val CHERNIKOVA, PROJECTION, GEOMETRIC_DIVIDE_AND_CONQUER = Value
+  }
+
+  object ScheduleEquivalenceRelation extends Enumeration {
+    val RATIONAL_MATRIX_AND_GENERATORS, INT_MATRIX, SCHED_TREE = Value
   }
 
   /**
@@ -116,7 +131,8 @@ object MinimalConfig {
       return None
 
     propName = "numExecutionTimeMeasurements"
-    val numExecutionTimeMeasurements : Option[Int] = getIntProperty(propName,
+    val numExecutionTimeMeasurements : Option[Int] = getIntProperty(
+      propName,
       rawConf)
     if (!numExecutionTimeMeasurements.isDefined) return None
     if (!checkMin(0, numExecutionTimeMeasurements, propName)) return None
@@ -146,7 +162,8 @@ object MinimalConfig {
       return None
 
     propName = "exportPopulationToCSV"
-    val exportPopulationToCSV : Option[Boolean] = getBooleanProperty(propName,
+    val exportPopulationToCSV : Option[Boolean] = getBooleanProperty(
+      propName,
       rawConf)
     if (!exportPopulationToCSV.isDefined)
       return None
@@ -186,7 +203,8 @@ object MinimalConfig {
       return None
 
     propName = "measurementTmpDirNamePrefix"
-    val measurementTmpDirNamePrefix : Option[String] = getProperty(propName,
+    val measurementTmpDirNamePrefix : Option[String] = getProperty(
+      propName,
       rawConf)
     if (!measurementTmpDirNamePrefix.isDefined)
       return None
@@ -359,9 +377,9 @@ object MinimalConfig {
     propName = "barvinokBinary"
     val barvinokBinary : Option[File] = MinimalConfig.getFileProperty(propName, rawConf)
     if (!barvinokBinary.isDefined) return None
-//    if (!Util.checkFileExistsAndHasRequiredPermissions(true, false, true, false,
-//      barvinokBinary.get))
-//      return None
+    //    if (!Util.checkFileExistsAndHasRequiredPermissions(true, false, true, false,
+    //      barvinokBinary.get))
+    //      return None
 
     propName = "barvinokLibraryPath"
     val barvinokLibraryPath : Option[File] = MinimalConfig.getFileProperty(propName, rawConf)
@@ -374,11 +392,159 @@ object MinimalConfig {
     val normalizeFeatures : Option[Boolean] = MinimalConfig.getBooleanProperty(propName, rawConf)
     if (!normalizeFeatures.isDefined)
       return None
-      
-    propName= "gpu"
-    val gpu : Option[Boolean] = MinimalConfig.getBooleanProperty(propName, rawConf)
-    if (!gpu.isDefined)
+
+    propName = "evaluationStrategy"
+
+    val evaluationStrategy : Option[EvaluationStrategy.Value] = MinimalConfig.getProperty(propName, rawConf) map {
+      v =>
+        {
+          try {
+            EvaluationStrategy.withName(v)
+          } catch {
+            case e : NoSuchElementException => {
+              myLogger.warning("Cannot interpret value as an evaluation strategy: " + rawConf.getProperty(propName))
+              return None
+            }
+          }
+        }
+    }
+    if (!evaluationStrategy.isDefined)
       return None
+
+    var learningSet : Option[List[File]] = None
+    var decTreeMinSamplesLeaf : Option[Option[Int]] = Some(None)
+    var learningAlgorithm : Option[Classifier.LearningAlgorithms.Value] = None
+    var randForestNTree : Option[Option[Int]] = Some(None)
+    var randForestMaxFeatures : Option[Option[Int]] = Some(None)
+    var pythonVEnvLocation : Option[Option[File]] = Some(None)
+
+    if (evaluationStrategy.get == EvaluationStrategy.CLASSIFIER
+      || evaluationStrategy.get == EvaluationStrategy.CLASSIFIER_AND_CPU
+      || evaluationStrategy.get == EvaluationStrategy.CLASSIFIER_AND_GPU) {
+      propName = "learningSet"
+      val learningSetStr : String = MinimalConfig.getProperty(propName, rawConf) match {
+        case None    => return None
+        case Some(s) => s
+      }
+      learningSet = Some(learningSetStr.split(", ").toList.map((path : String) => {
+        val f : File = new File(path)
+        //        if (!Util.checkFileExistsAndHasRequiredPermissions(r = true, w = false, x = false, isDir = false, f))
+        //          return None
+        f
+      }))
+
+      propName = "decTreeMinSamplesLeaf"
+      decTreeMinSamplesLeaf = Some(MinimalConfig.getIntProperty(propName, rawConf))
+      if (!decTreeMinSamplesLeaf.get.isDefined)
+        return None
+      if (!MinimalConfig.checkMin(0, decTreeMinSamplesLeaf.get, propName))
+        return None
+
+      propName = "learningAlgorithm"
+      val learningAlgorithmStr : String = MinimalConfig.getProperty(propName, rawConf) match {
+        case None    => return None
+        case Some(s) => s
+      }
+      learningAlgorithm = Some(try {
+        Classifier.LearningAlgorithms.withName(learningAlgorithmStr)
+      } catch {
+        case e : NoSuchElementException => {
+          myLogger.warning("Unknown learning algorithm: " + learningAlgorithmStr)
+          return None
+        }
+      })
+
+      propName = "pythonVEnvLocation"
+      pythonVEnvLocation = MinimalConfig.getOptionalProperty(propName, rawConf, MinimalConfig.getFileProperty)
+      if (!pythonVEnvLocation.isDefined)
+        return None
+      if (pythonVEnvLocation.get.isDefined && !Util.checkFileExistsAndHasRequiredPermissions(r = true, w = false, x = true, isDir = true,
+        pythonVEnvLocation.get.get))
+        return None
+
+      if (learningAlgorithm.get == Classifier.LearningAlgorithms.RANDOM_FOREST) {
+
+        propName = "randForestNTree"
+        randForestNTree = Some(MinimalConfig.getIntProperty(propName, rawConf))
+        if (!randForestNTree.get.isDefined)
+          return None
+        if (!MinimalConfig.checkMin(1, randForestNTree.get, propName)) {
+          return None
+        }
+
+        propName = "randForestMaxFeatures"
+        randForestMaxFeatures = Some(MinimalConfig.getIntProperty(propName, rawConf))
+        if (!randForestMaxFeatures.get.isDefined)
+          return None
+        if (!MinimalConfig.checkMinMax(1, Feature.features.size, randForestMaxFeatures.get, propName)) {
+          return None
+        }
+      }
+    }
+
+    propName = "samplingStrategy"
+    val samplingStrategyStr : Option[String] = getProperty(propName, rawConf)
+    if (!samplingStrategyStr.isDefined)
+      return None
+    val samplingStrategy : SamplingStrategy.Value = try {
+      SamplingStrategy.withName(samplingStrategyStr.get)
+    } catch {
+      case (e : NoSuchElementException) => {
+        myLogger.warning(f"The sampling strategy '${samplingStrategyStr.get}' is unknown.")
+        return None
+      }
+    }
+
+    var schedCoeffsMin : Option[Int] = None
+    var schedCoeffsMax : Option[Int] = None
+    var schedCoeffsExpectationValue : Option[Double] = None
+
+    if (samplingStrategy == SamplingStrategy.PROJECTION) {
+      propName = "schedCoeffsMin"
+      schedCoeffsMin = getIntProperty(propName, rawConf)
+      if (!schedCoeffsMin.isDefined)
+        return None
+
+      propName = "schedCoeffsMax"
+      schedCoeffsMax = getIntProperty(propName, rawConf)
+      if (!schedCoeffsMax.isDefined)
+        return None
+
+      if (schedCoeffsMin.get >= schedCoeffsMax.get) {
+        myLogger.warning(f"schedCoeffsMax must be bigger than schedCoeffsMin: ${schedCoeffsMax.get} <= ${schedCoeffsMin.get}")
+        return None
+      }
+
+      propName = "schedCoeffsExpectationValue"
+      schedCoeffsExpectationValue = getDoubleProperty(propName, rawConf)
+      if (!schedCoeffsExpectationValue.isDefined)
+        return None
+
+      if (!checkMin(0.001, schedCoeffsExpectationValue, "schedCoeffsExpectationValue"))
+        return None
+    }
+
+    var schedCoeffsAbsMax : Option[Int] = None
+
+    if (samplingStrategy == SamplingStrategy.GEOMETRIC_DIVIDE_AND_CONQUER) {
+      propName = "schedCoeffsAbsMax"
+      schedCoeffsAbsMax = MinimalConfig.getIntProperty(propName, rawConf)
+      if (!schedCoeffsAbsMax.isDefined)
+        return None
+    }
+
+    propName = "scheduleEquivalenceRelation"
+    val scheduleEquivalenceRelationStr : Option[String] = getProperty(propName, rawConf)
+    if (!scheduleEquivalenceRelationStr.isDefined)
+      return None
+    val scheduleEquivalenceRelation : ScheduleEquivalenceRelation.Value = try {
+      ScheduleEquivalenceRelation.withName(scheduleEquivalenceRelationStr.get)
+    } catch {
+      case e : NoSuchElementException => {
+        myLogger.warning(f"The schedule equivalence relation '${scheduleEquivalenceRelationStr.get}' is unknown.")
+        return None
+      }
+    }
 
     return Some(new MinConfig(
       numMeasurementThreads.get,
@@ -434,7 +600,19 @@ object MinimalConfig {
       barvinokBinary.get,
       barvinokLibraryPath.get,
       normalizeFeatures.get,
-      gpu.get))
+      evaluationStrategy.get,
+      learningSet,
+      decTreeMinSamplesLeaf.get,
+      learningAlgorithm,
+      randForestNTree.get,
+      randForestMaxFeatures.get,
+      pythonVEnvLocation.get,
+      samplingStrategy,
+      schedCoeffsMin,
+      schedCoeffsMax,
+      schedCoeffsExpectationValue,
+      scheduleEquivalenceRelation,
+      schedCoeffsAbsMax))
   }
 
   /**
@@ -529,6 +707,7 @@ object MinimalConfig {
           case "NONE" => Some(None)
           case _ => parser(key, props) match {
             case None        => None
+
             case s @ Some(_) => Some(s)
           }
         }
@@ -578,7 +757,8 @@ object MinimalConfig {
     *
     * @return Returns Some(v) if value v for key exists. Otherwise returns None.
     */
-  def getDoubleProperty(key : String,
+  def getDoubleProperty(
+    key : String,
     props : Properties) : Option[Double] = getNumberProperty(key, props,
     ParseArgs.parseDouble, "double")
 
@@ -597,7 +777,8 @@ object MinimalConfig {
     *
     * @return Returns Some(v) if value v for key exists. Otherwise returns None.
     */
-  def getIntProperty(key : String,
+  def getIntProperty(
+    key : String,
     props : Properties) : Option[Int] = getNumberProperty(key, props,
     ParseArgs.parseInt, "integer")
 
@@ -607,7 +788,8 @@ object MinimalConfig {
     *
     * @return Returns Some(v) if value v for key exists. Otherwise returns None.
     */
-  def getLongProperty(key : String,
+  def getLongProperty(
+    key : String,
     props : Properties) : Option[Long] = getNumberProperty(key, props,
     ParseArgs.parseLong, "long integer")
 
@@ -631,60 +813,72 @@ object MinimalConfig {
 }
 
 abstract class MinimalConfig(
-    val numMeasurementThreads : Int,
-    val rayCoeffsRange : Int,
-    val lineCoeffsRange : Int,
-    val maxNumRays : MinimalConfig.NumGeneratorsLimit,
-    val maxNumLines : MinimalConfig.NumGeneratorsLimit,
-    val probabilityToCarryDep : Double,
-    val maxNumSchedsAtOnce : Int,
-    val measurementCommand : String,
-    val measurementWorkingDir : File,
-    val measurementTmpDirBase : File,
-    val benchmarkName : String,
-    val referenceOutputFile : File,
-    val numExecutionTimeMeasurements : Int,
-    val populationFilePrefix : String,
-    val exportSchedulesToJSCOPFiles : Boolean,
-    val jscopFolderPrefix : String,
-    val measurementTimeout : Long,
-    val exportPopulationToCSV : Boolean,
-    val csvFilePrefix : String,
-    val logToFile : Boolean,
-    val logFile : File,
-    val evaluationSigIntExitCode : Int,
-    val randSchedsTimeout : Long,
-    val measurementTmpDirNamePrefix : String,
-    val genSchedsMaxAllowedConseqFailures : Int,
-    val numScheduleGenThreads : Int,
-    val filterImportedPopulation : Boolean,
-    val islComputeout : Int,
-    val paramValMappings : Map[String, Int],
-    val measureParExecTime : Boolean,
-    val measureSeqExecTime : Boolean,
-    val moveVertices : Boolean,
-    val rayPruningThreshold : Option[Rat],
-    val insertSetNodes : Boolean,
-    val compilationTimeout : Option[Long],
-    val benchmarkingSurrenderTimeout : Option[Double],
-    val measureCacheHitRateSeq : Boolean,
-    val measureCacheHitRatePar : Boolean,
-    val seed : Option[Long],
-    val linIndepVectsDoNotFixDims : Boolean,
-    val simplifySchedTrees : Boolean,
-    val splitLoopBodies : Boolean,
-    val numCompilatonDurationMeasurements : Int,
-    val validateOutput : Boolean,
-    val tilingPermitInnerSeq : Boolean,
-    val schedTreeSimplRebuildDimScheds : Boolean,
-    val schedTreeSimplRemoveCommonOffset : Boolean,
-    val schedTreeSimplDivideCoeffsByGCD : Boolean,
-    val schedTreeSimplElimSuperfluousSubTrees : Boolean,
-    val schedTreeSimplElimSuperfluousDimNodes : Boolean,
-    val barvinokBinary : File,
-    val barvinokLibraryPath : File,
-    val normalizeFeatures : Boolean,
-    val gpu : Boolean) {
+  val numMeasurementThreads : Int,
+  val rayCoeffsRange : Int,
+  val lineCoeffsRange : Int,
+  val maxNumRays : MinimalConfig.NumGeneratorsLimit,
+  val maxNumLines : MinimalConfig.NumGeneratorsLimit,
+  val probabilityToCarryDep : Double,
+  val maxNumSchedsAtOnce : Int,
+  val measurementCommand : String,
+  val measurementWorkingDir : File,
+  val measurementTmpDirBase : File,
+  val benchmarkName : String,
+  val referenceOutputFile : File,
+  val numExecutionTimeMeasurements : Int,
+  val populationFilePrefix : String,
+  val exportSchedulesToJSCOPFiles : Boolean,
+  val jscopFolderPrefix : String,
+  val measurementTimeout : Long,
+  val exportPopulationToCSV : Boolean,
+  val csvFilePrefix : String,
+  val logToFile : Boolean,
+  val logFile : File,
+  val evaluationSigIntExitCode : Int,
+  val randSchedsTimeout : Long,
+  val measurementTmpDirNamePrefix : String,
+  val genSchedsMaxAllowedConseqFailures : Int,
+  val numScheduleGenThreads : Int,
+  val filterImportedPopulation : Boolean,
+  val islComputeout : Int,
+  val paramValMappings : Map[String, Int],
+  val measureParExecTime : Boolean,
+  val measureSeqExecTime : Boolean,
+  val moveVertices : Boolean,
+  val rayPruningThreshold : Option[Rat],
+  val insertSetNodes : Boolean,
+  val compilationTimeout : Option[Long],
+  val benchmarkingSurrenderTimeout : Option[Double],
+  val measureCacheHitRateSeq : Boolean,
+  val measureCacheHitRatePar : Boolean,
+  val seed : Option[Long],
+  val linIndepVectsDoNotFixDims : Boolean,
+  val simplifySchedTrees : Boolean,
+  val splitLoopBodies : Boolean,
+  val numCompilatonDurationMeasurements : Int,
+  val validateOutput : Boolean,
+  val tilingPermitInnerSeq : Boolean,
+  val schedTreeSimplRebuildDimScheds : Boolean,
+  val schedTreeSimplRemoveCommonOffset : Boolean,
+  val schedTreeSimplDivideCoeffsByGCD : Boolean,
+  val schedTreeSimplElimSuperfluousSubTrees : Boolean,
+  val schedTreeSimplElimSuperfluousDimNodes : Boolean,
+  val barvinokBinary : File,
+  val barvinokLibraryPath : File,
+  val normalizeFeatures : Boolean,
+  val evaluationStrategy : EvaluationStrategy.Value,
+  val learningSet : Option[List[File]],
+  val decTreeMinSamplesLeaf : Option[Int],
+  val learningAlgorithm : Option[Classifier.LearningAlgorithms.Value],
+  val randForestNTree : Option[Int],
+  val randForestMaxFeatures : Option[Int],
+  val pythonVEnvLocation : Option[File],
+  val samplingStrategy : MinimalConfig.SamplingStrategy.Value,
+  val schedCoeffsMin : Option[Int],
+  val schedCoeffsMax : Option[Int],
+  val schedCoeffsExpectationValue : Option[Double],
+  val scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
+  val schedCoeffsAbsMax : Option[Int]) {
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
@@ -744,7 +938,21 @@ abstract class MinimalConfig(
     MinimalConfig.toStringAppend("barvinokBinary", barvinokBinary, sb)
     MinimalConfig.toStringAppend("barvinokLibraryPath", barvinokLibraryPath, sb)
     MinimalConfig.toStringAppend("normalizeFeatures", normalizeFeatures, sb)
-    MinimalConfig.toStringAppend("gpu", gpu, sb)
+    MinimalConfig.toStringAppend("evaluationStrategy", evaluationStrategy, sb)
+    MinimalConfig.toStringAppendOptional("learningSet", learningSet.map(_.mkString("[", ", ", "]")), sb)
+    MinimalConfig.toStringAppendOptional("decTreeMinSamplesLeaf", decTreeMinSamplesLeaf, sb)
+    MinimalConfig.toStringAppendOptional("learningAlgorithm", learningAlgorithm, sb)
+    MinimalConfig.toStringAppendOptional("randForestNTree", randForestNTree, sb)
+    MinimalConfig.toStringAppendOptional("randForestMaxFeatures", randForestMaxFeatures, sb)
+    MinimalConfig.toStringAppendOptional("pythonVEnvLocation", pythonVEnvLocation, sb)
+    MinimalConfig.toStringAppend("samplingStrategy", samplingStrategy, sb)
+    if (samplingStrategy == MinimalConfig.SamplingStrategy.PROJECTION) {
+      MinimalConfig.toStringAppend("schedCoeffsMin", schedCoeffsMin.get, sb)
+      MinimalConfig.toStringAppend("schedCoeffsMax", schedCoeffsMax.get, sb)
+      MinimalConfig.toStringAppend("schedCoeffsExpectationValue", schedCoeffsExpectationValue.get, sb)
+    }
+    MinimalConfig.toStringAppend("scheduleEquivalenceRelation", scheduleEquivalenceRelation, sb)
+    MinimalConfig.toStringAppendOptional("schedCoeffsAbsMax", schedCoeffsAbsMax, sb)
     return sb.toString()
   }
 }
@@ -806,7 +1014,19 @@ class MinConfig(
   barvinokBinary : File,
   barvinokLibraryPath : File,
   normalizeFeatures : Boolean,
-  gpu : Boolean) extends MinimalConfig(
+  evaluationStrategy : EvaluationStrategy.Value,
+  learningSet : Option[List[File]],
+  decTreeMinSamplesLeaf : Option[Int],
+  learningAlgorithm : Option[Classifier.LearningAlgorithms.Value],
+  randForestNTree : Option[Int],
+  randForestMaxFeatures : Option[Int],
+  pythonVEnvLocation : Option[File],
+  samplingStrategy : MinimalConfig.SamplingStrategy.Value,
+  schedCoeffsMin : Option[Int],
+  schedCoeffsMax : Option[Int],
+  schedCoeffsExpectationValue : Option[Double],
+  scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
+  schedCoeffsAbsMax : Option[Int]) extends MinimalConfig(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -860,5 +1080,17 @@ class MinConfig(
   barvinokBinary,
   barvinokLibraryPath,
   normalizeFeatures,
-  gpu) {
+  evaluationStrategy,
+  learningSet,
+  decTreeMinSamplesLeaf,
+  learningAlgorithm,
+  randForestNTree,
+  randForestMaxFeatures,
+  pythonVEnvLocation,
+  samplingStrategy,
+  schedCoeffsMin,
+  schedCoeffsMax,
+  schedCoeffsExpectationValue,
+  scheduleEquivalenceRelation,
+  schedCoeffsAbsMax) {
 }

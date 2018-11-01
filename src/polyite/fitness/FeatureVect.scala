@@ -24,4 +24,10 @@ class FeatureVect(vect : Map[Feature, Double] = Map.empty) {
   def getVect() : List[(Feature, Double)] = features2Vals.toList.sortBy(_._1)
 
   override def toString() : String = getVect.map((t : (Feature, Double)) => t._1 + " : " + t._2).mkString("[", ",\n", "]")
+
+  override def hashCode() : Int = features2Vals.hashCode()
+
+  override def equals(o : Any) : Boolean = {
+    return o.isInstanceOf[FeatureVect] && o.asInstanceOf[FeatureVect].features2Vals.equals(features2Vals)
+  }
 }

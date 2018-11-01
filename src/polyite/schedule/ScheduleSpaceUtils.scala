@@ -19,49 +19,17 @@ import isl.IslException
 import polyite.ScopInfo
 import polyite.config.Config
 import polyite.util.Util
-import polyite.util.Util.GeneratorsRat
+import polyite.schedule.sampling.Polyhedron
+import polyite.util.Rat
+
 object ScheduleSpaceUtils {
   val myLogger : Logger = Logger.getLogger("")
   /**
     * Check whether dependence {@code d} is carried by all schedules resulting
     * from the schedule coefficient vectors in {@code coeffSpace}.
     */
-  def checkCarried(domInfo : DomainCoeffInfo,
-    coeffSpace : isl.Set)(d : Dependence) : Boolean = {
-    return coeffSpace.isSubset(d.strongConstr)
-  }
-
-  /**
-    * Constructs a schedule space as a list of Chernikova generator sets. The
-    * schedules in the constructed schedule space will carry all dependences
-    * contained by {@code deps} in the order given in {@code depsPartition}. The
-    * function stops generating new dimensions as soon as all dependences have
-    * been carried.
-    *
-    * @param deps dependences that will be carried strongly by the schedules
-    * contained in the generated schedule space.
-    * @param depsPartition a list of subsets of {@code deps}. Each subset
-    * specifies the dependences that will be carried strongly by the schedule
-    * dimension with the same index. Each element of {@code deps} must occur in
-    * exactly one set in {@code depsPartition}.
-    *
-    * @return Returns {@code None} if it is not possible to construct a schedule
-    * space according to {@code depsPartition}.
-    *
-    * @throws IllegalArgumentException thrown if {@code depsPartition} doesn't
-    * contain all elements of {@code deps} or a dependence occurs in more than
-    * one set of {@code depsPartition}.
-    */
-  def constructScheduleSpaceFromDepsPartitionDual(deps : Set[Dependence],
-    depsPartition : List[Set[Dependence]],
-    domInfo : DomainCoeffInfo) : Option[Iterable[GeneratorsRat]] = {
-    checkIsValidPartitioning(deps, depsPartition)
-    constructScheduleSpaceFromDepsPartition(deps, depsPartition, domInfo) match {
-      case None => return None
-      case Some(sp) => {
-        return Some(sp.map(Util.constraints2GeneratorsRat))
-      }
-    }
+  def checkCarried(domInfo : DomainCoeffInfo, coeffSpace : isl.Set)(d : Dependence) : Boolean = {
+    return Isl.simplify(coeffSpace.detectEqualities()).isSubset(d.strongConstr.detectEqualities())
   }
 
   /**
@@ -113,18 +81,38 @@ object ScheduleSpaceUtils {
 
     myLogger.info("Separating distinct dependencies.")
     val depList : Iterable[isl.BasicMap] = preprocess(deps, scop)
-    val dependences : Set[Dependence] = bMaps2Deps(depList, domInfo)
+    val dependences : Set[Dependence] = bMaps2Deps(depList, domInfo, 0)
     (dependences, domInfo)
   }
-  private def bMaps2Deps(bMaps : Iterable[isl.BasicMap], domInfo : DomainCoeffInfo) : Set[Dependence] = {
+
+  private def bMaps2Deps(bMaps : Iterable[isl.BasicMap], domInfo : DomainCoeffInfo, islComputeout : Int) : Set[Dependence] = {
     return bMaps.toSet.map { d : isl.BasicMap =>
-      val weakConstr : isl.BasicSet = compSchedConstrForDep(d, domInfo, false)
-      val strongConstr : isl.BasicSet = compSchedConstrForDep(d, domInfo, true)
-      new Dependence(d, weakConstr, strongConstr)
+      {
+        val ctx : isl.Ctx = d.getCtx
+        val oldMaxOps : Int = ctx.getMaxOperations
+        ctx.setMaxOperations(islComputeout)
+        val dSimpl : isl.BasicMap = Isl.simplify(d)
+        val weakConstr : isl.BasicSet = compSchedConstrForDep(dSimpl, domInfo, false)
+        val strongConstr : isl.BasicSet = compSchedConstrForDep(dSimpl, domInfo, true)
+        ctx.resetOperations()
+        ctx.setMaxOperations(oldMaxOps)
+        new Dependence(d, weakConstr, strongConstr)
+      }
     }
   }
+
+  private def bMaps2DepsNoConstr(bMaps : Iterable[isl.BasicMap], domInfo : DomainCoeffInfo) : Set[Dependence] = {
+    return bMaps.toSet.map { d : isl.BasicMap =>
+      {
+        val dSimpl : isl.BasicMap = Isl.simplify(d)
+        new Dependence(d, Isl.islBasicSetFromSet(domInfo.universe), Isl.islBasicSetFromSet(domInfo.universe))
+      }
+    }
+  }
+
   /**
-    * Calculate the input dependences of the given SCoP according to {@code sched}. These are interesting for schedule analysis.
+    * Calculate the input dependences of the given SCoP according to {@code sched}. These are interesting for schedule
+    * analysis.
     */
   def calcInputDeps(scop : ScopInfo, domInfo : DomainCoeffInfo, sched : isl.UnionMap) : Set[Dependence] = {
     //    val depArr : Array[isl.UnionMap] = new Array[isl.UnionMap](1)
@@ -138,18 +126,21 @@ object ScheduleSpaceUtils {
     //    val input : isl.UnionMap = depArr(0)
     val order : isl.UnionMap = schedule.lexLtUnionMap(schedule)
     val input : isl.UnionMap = reads.applyRange(reads.reverse()).intersect(order)
-
     val depList : Iterable[isl.BasicMap] = sepDepsFast(input, scop)
-    return bMaps2Deps(depList, domInfo)
+    return bMaps2DepsNoConstr(depList, domInfo)
   }
 
   private def sepDepsFast(deps : isl.UnionMap, scop : ScopInfo) : Set[isl.BasicMap] = {
     var result : HashSet[isl.BasicMap] = HashSet.empty
     deps.foreachMap((m : isl.Map) => {
-      m.foreachBasicMap((bm : isl.BasicMap) => result.add(bm.removeDivs()))
+      var i : Int = 0
+      m.foreachBasicMap((bm : isl.BasicMap) => {
+        result.add(bm.removeDivs())
+      })
     })
     val resFiltered : Set[isl.BasicMap] = result.toSet.filterNot { (d : isl.BasicMap) =>
-      d.intersectDomain(scop.getDomain).intersectRange(scop.getDomain).isEmpty()
+      val empty : Boolean = d.intersectDomain(scop.getDomain).intersectRange(scop.getDomain).isEmpty()
+      empty
     }
     return resFiltered
   }
@@ -227,7 +218,8 @@ object ScheduleSpaceUtils {
     * contain all elements of {@code deps} or a dependence occurs in more than
     * one set of {@code depsPartition}.
     */
-  def constructScheduleSpaceFromDepsPartition(deps : Set[Dependence],
+  def constructScheduleSpaceFromDepsPartition(
+    deps : Set[Dependence],
     depsPartition : List[Set[Dependence]],
     domInfo : DomainCoeffInfo) : Option[Iterable[isl.Set]] = {
     checkIsValidPartitioning(deps, depsPartition)
@@ -249,7 +241,8 @@ object ScheduleSpaceUtils {
     return Some(schedSpace.reverse)
   }
 
-  private def checkIsValidPartitioning(deps : Set[Dependence],
+  def checkIsValidPartitioning(
+    deps : Set[Dependence],
     depsPartition : List[Set[Dependence]]) {
     val foundDeps : HashSet[Dependence] = HashSet.empty
     for (p : Set[Dependence] <- depsPartition) {
@@ -273,10 +266,12 @@ object ScheduleSpaceUtils {
     * @throws InterruptedException thrown if the number of required Isl-operations exceeds the
     * configuration option {@code islComputeout}.
     */
-  def constructScheduleSpace(domInfo : DomainCoeffInfo,
-    deps2CarryStrongly : Set[Dependence], conf : Config) : Iterable[GeneratorsRat] = {
-    return constructScheduleSpace(new Schedule(domInfo, deps2CarryStrongly),
-      deps2CarryStrongly, conf)
+  def constructScheduleSpace(
+    domInfo : DomainCoeffInfo,
+    deps2CarryStrongly : Set[Dependence], preparePolyhedra : (isl.Set, Config) => Polyhedron, conf : Config) : Iterable[Polyhedron] = {
+    return constructScheduleSpace(
+      new Schedule(domInfo, deps2CarryStrongly),
+      deps2CarryStrongly, preparePolyhedra, conf)
   }
 
   /**
@@ -289,10 +284,12 @@ object ScheduleSpaceUtils {
     * @throws InterruptedException thrown if the number of required Isl-operations exceeds the
     * configuration option {@code islComputeout}.
     */
-  def constructScheduleSpaceWithProfile(domInfo : DomainCoeffInfo,
-    deps2CarryStrongly : Set[Dependence], conf : Config) : (Iterable[GeneratorsRat], Long) = {
-    return constructScheduleSpaceWithProfile(new Schedule(domInfo, deps2CarryStrongly),
-      deps2CarryStrongly, conf)
+  def constructScheduleSpaceWithProfile(
+    domInfo : DomainCoeffInfo,
+    deps2CarryStrongly : Set[Dependence], preparePolyhedra : (isl.Set, Config) => Polyhedron, conf : Config) : (Iterable[Polyhedron], Long) = {
+    return constructScheduleSpaceWithProfile(
+      new Schedule(domInfo, deps2CarryStrongly),
+      deps2CarryStrongly, preparePolyhedra, conf)
   }
 
   /**
@@ -303,8 +300,9 @@ object ScheduleSpaceUtils {
     * @return a Tuple consisting of the schedule space representation and the total duration spent inside the Chernikova
     * algorithm in milliseconds.
     */
-  def constructScheduleSpaceWithProfile(partialSched : Schedule,
-    deps2CarryStrongly : Set[Dependence], conf : Config) : (Iterable[GeneratorsRat], Long) = {
+  def constructScheduleSpaceWithProfile(
+    partialSched : Schedule,
+    deps2CarryStrongly : Set[Dependence], preparePolyhedra : (isl.Set, Config) => Polyhedron, conf : Config) : (Iterable[Polyhedron], Long) = {
 
     /*
      * Use an own ISL context in here in order to be able to work with
@@ -313,7 +311,7 @@ object ScheduleSpaceUtils {
      */
     val tmpCtx : isl.Ctx = Isl.initCtx()
     try {
-      return constructScheduleSpaceHelp(tmpCtx, partialSched, deps2CarryStrongly, conf)
+      return constructScheduleSpaceHelp(tmpCtx, partialSched, deps2CarryStrongly, preparePolyhedra, conf)
     } catch {
       case e : IslException => {
         //        tmpCtx.resetError()
@@ -333,13 +331,14 @@ object ScheduleSpaceUtils {
     * for the suffix of the given partial schedule. The generated dimensions will
     * carry strongly all dependences from {@code deps2CarryStrongly}.
     */
-  def constructScheduleSpace(partialSched : Schedule,
-    deps2CarryStrongly : Set[Dependence], conf : Config) : Iterable[GeneratorsRat] = {
-    return constructScheduleSpaceWithProfile(partialSched, deps2CarryStrongly, conf)._1
+  def constructScheduleSpace(
+    partialSched : Schedule,
+    deps2CarryStrongly : Set[Dependence], preparePolyhedra : (isl.Set, Config) => Polyhedron, conf : Config) : Iterable[Polyhedron] = {
+    return constructScheduleSpaceWithProfile(partialSched, deps2CarryStrongly, preparePolyhedra, conf)._1
   }
 
   private def constructScheduleSpaceHelp(tmpCtx : isl.Ctx, partialSched : Schedule,
-    deps2CarryStrongly : Set[Dependence], conf : Config) : (Iterable[GeneratorsRat], Long) = {
+    deps2CarryStrongly : Set[Dependence], preparePolyhedra : (isl.Set, Config) => Polyhedron, conf : Config) : (Iterable[Polyhedron], Long) = {
     val schedTmpCtx : Schedule = partialSched.transferToCtx(tmpCtx)
 
     val deps2CarryStronglyTmpCtx : Set[Dependence] = {
@@ -352,7 +351,7 @@ object ScheduleSpaceUtils {
     tmpCtx.setMaxOperations(conf.islComputeout)
 
     // Construct the schedule space
-    val searchSpaceGenerators : ListBuffer[GeneratorsRat] = ListBuffer.empty
+    val searchSpaceGenerators : ListBuffer[Polyhedron] = ListBuffer.empty
     val initCarriedDeps : Set[Dependence] = schedTmpCtx.getCarriedDeps
     var uncarriedDeps : Set[Dependence] = schedTmpCtx.deps -- initCarriedDeps
     var deps2CarryStronglyRand : List[Dependence] = Random
@@ -361,7 +360,7 @@ object ScheduleSpaceUtils {
     // time spent in Chernikova
     var chernikovaDuration : Long = 0
 
-    /* 
+    /*
      * As long as the set of dependences that must be carried strongly is not
      * empty, add an additional schedule dimension.
      */
@@ -379,7 +378,8 @@ object ScheduleSpaceUtils {
          *  dimension.
          */
         var carriedByCurrDim = deps2CarryStronglyRand.take(numDepsToCarry).toSet
-        val (coeffSpaceTmp, uncarryableDeps) = calculateCoeffSpace(uncarriedDeps,
+        val (coeffSpaceTmp, uncarryableDeps) = calculateCoeffSpace(
+          uncarriedDeps,
           carriedByCurrDim, domInfo.universe)
         coeffSpace = coeffSpaceTmp
         carriedByCurrDim --= uncarryableDeps
@@ -392,9 +392,8 @@ object ScheduleSpaceUtils {
       uncarriedDeps = uncarriedDeps.filterNot(checkCarried(domInfo, coeffSpace))
       deps2CarryStronglyRand = deps2CarryStronglyRand.filterNot(checkCarried(domInfo, coeffSpace))
       val start : Long = System.currentTimeMillis()
-      val generators : GeneratorsRat = Util.constraints2GeneratorsRat(coeffSpace, conf.moveVertices, conf.rayPruningThreshold)
+      searchSpaceGenerators.append(preparePolyhedra(coeffSpace, conf))
       chernikovaDuration += System.currentTimeMillis() - start
-      searchSpaceGenerators.append(generators)
       System.gc()
       System.gc()
       System.gc()
@@ -407,7 +406,8 @@ object ScheduleSpaceUtils {
     * dependences are carried at least weakly. Use {@code makePar} to the require
     * that all of the given dependences are carried just weakly.
     */
-  def calculateCoeffSpace(domInfo : DomainCoeffInfo,
+  def calculateCoeffSpace(
+    domInfo : DomainCoeffInfo,
     deps : Iterable[Dependence], makePar : Boolean) : isl.Set = {
     var coeffSpace : isl.Set = domInfo.universe
 
@@ -437,7 +437,8 @@ object ScheduleSpaceUtils {
     * dependences from {@code depsToCarry} that could not be guaranteed to be
     * carried strongly.
     */
-  def calculateCoeffSpace(deps : Iterable[Dependence],
+  def calculateCoeffSpace(
+    deps : Iterable[Dependence],
     depsToCarry : Iterable[Dependence], universe : isl.Set) : (isl.Set, Set[Dependence]) = {
     var coeffSpace : isl.Set = universe
 
@@ -589,27 +590,10 @@ object ScheduleSpaceUtils {
   }
 
   /**
-    * Iterate over the given list of generator sets and determine the maximum number of lines of all dimensions.
-    */
-  def getMaxNumLines(schedSpaceGenerators : Iterable[GeneratorsRat]) : Int = {
-    if (schedSpaceGenerators.isEmpty)
-      return 0
-    schedSpaceGenerators.map(_.lines.size).max
-  }
-
-  /**
-    * Iterate over the given list of generator sets and determine the maximum number of rays of all dimensions.
-    */
-  def getMaxNumRays(schedSpaceGenerators : Iterable[GeneratorsRat]) : Int = {
-    if (schedSpaceGenerators.isEmpty)
-      return 0
-    return schedSpaceGenerators.map(_.rays.size).max
-  }
-
-  /**
     * Counts for each of the dependences in {@code deps} the number of dependences that it interferes with.
     */
-  def calcInterferenceOfDeps(deps : Iterable[Dependence],
+  def calcInterferenceOfDeps(
+    deps : Iterable[Dependence],
     initBoundingBox : isl.Set) : Map[Dependence, Int] = {
     val depA : Array[Dependence] = deps.toArray
     val result : HashMap[Dependence, Int] = HashMap.empty
@@ -641,14 +625,18 @@ object ScheduleSpaceUtils {
   }
 
   private var memAccesses : HashMap[String, StmtMemAccesses] = null
+  private val memAccLock : Object = new Object()
 
   /**
     * Calculates the amount of data communicated by each of the dependences in {@code deps}.
     */
-  def calcTrafficSizesOfDeps(deps : Iterable[Dependence],
+  def calcTrafficSizesOfDeps(
+    deps : Iterable[Dependence],
     scop : ScopInfo, conf : Config) : Map[Dependence, Long] = {
-    if (memAccesses == null)
-      memAccesses = buildMemAccessMap(scop)
+    memAccLock.synchronized {
+      if (memAccesses == null)
+        memAccesses = buildMemAccessMap(scop)
+    }
 
     val result : HashMap[Dependence, Long] = HashMap.empty
     for (d <- deps) {
@@ -662,35 +650,80 @@ object ScheduleSpaceUtils {
       val destWriteLocs : Set[String] = getAccessedMemLocs(scop.getWrs, destStmt)
 
       val rrTrafficSize = calcTrafficSizeOfDep(d.map, srcReadLocs, destReadLocs,
-        memAccesses(sourceStmt).rds, memAccesses(destStmt).rds, conf)
+        memAccLock.synchronized { memAccesses(sourceStmt).rds },
+        memAccLock.synchronized { memAccesses(destStmt).rds }, conf)
+
       val rwTrafficSize = calcTrafficSizeOfDep(d.map, srcReadLocs, destWriteLocs,
-        memAccesses(sourceStmt).rds, memAccesses(destStmt).wrs, conf)
+        memAccLock.synchronized { memAccesses(sourceStmt).rds },
+        memAccLock.synchronized { memAccesses(destStmt).wrs }, conf)
+
       val wrTrafficSize = calcTrafficSizeOfDep(d.map, srcWriteLocs, destReadLocs,
-        memAccesses(sourceStmt).wrs, memAccesses(destStmt).rds, conf)
+        memAccLock.synchronized { memAccesses(sourceStmt).wrs },
+        memAccLock.synchronized { memAccesses(destStmt).rds }, conf)
+
       val wwTrafficSize = calcTrafficSizeOfDep(d.map, srcWriteLocs, destWriteLocs,
-        memAccesses(sourceStmt).wrs, memAccesses(destStmt).wrs, conf)
+        memAccLock.synchronized { memAccesses(sourceStmt).wrs },
+        memAccLock.synchronized { memAccesses(destStmt).wrs }, conf)
       result.put(d, rrTrafficSize + rwTrafficSize + wrTrafficSize + wwTrafficSize)
     }
     result.toMap
   }
 
-  var stmtMemTraffic : Map[String, Long] = null
+  private var stmtMemTraffic : Map[String, Long] = null
+  private val stmtMemTrafficLock : Object = new Object()
 
-  def calcMemTrafficSizesOfDepStmts(deps : Iterable[Dependence],
+  def calcMemTrafficSizesOfDepStmts(
+    deps : Iterable[Dependence],
     scop : ScopInfo, conf : Config) : Map[Dependence, Long] = {
-    if (memAccesses == null)
-      memAccesses = buildMemAccessMap(scop)
+    memAccLock.synchronized {
+      if (memAccesses == null)
+        memAccesses = buildMemAccessMap(scop)
+    }
     val result : HashMap[Dependence, Long] = HashMap.empty
 
-    if (stmtMemTraffic == null)
-      stmtMemTraffic = Isl.islUnionSetGetTupleNames(scop.getDomain).map((stmt : String) => {
-        (stmt, calcMemTrafficSizeOfStmt(stmt, scop, conf, memAccesses(stmt)))
-      }).toMap
+    stmtMemTrafficLock.synchronized {
+      memAccLock.synchronized {
+        if (stmtMemTraffic == null)
+          stmtMemTraffic = Isl.islUnionSetGetTupleNames(scop.getDomain).map((stmt : String) => {
+            (stmt, calcMemTrafficSizeOfStmt(stmt, scop, conf, memAccesses(stmt)))
+          }).toMap
+      }
+    }
 
     for (d <- deps) {
       val sourceStmt : String = d.getTupleNameIn()
       val destStmt : String = d.getTupleNameOut()
-      result.put(d, stmtMemTraffic(sourceStmt) + stmtMemTraffic(destStmt))
+      stmtMemTrafficLock.synchronized {
+        result.put(d, stmtMemTraffic(sourceStmt) + stmtMemTraffic(destStmt))
+      }
+    }
+    return result.toMap
+  }
+
+  def calcMemTrafficSizesOfDepStmtsApprox(
+    deps : Iterable[Dependence],
+    scop : ScopInfo, conf : Config) : Map[Dependence, Long] = {
+    memAccLock.synchronized {
+      if (memAccesses == null)
+        memAccesses = buildMemAccessMap(scop)
+    }
+    val result : HashMap[Dependence, Long] = HashMap.empty
+
+    stmtMemTrafficLock.synchronized {
+      memAccLock.synchronized {
+        if (stmtMemTraffic == null)
+          stmtMemTraffic = Isl.islUnionSetGetTupleNames(scop.getDomain).map((stmt : String) => {
+            (stmt, calcApproxMemTrafficSizeStmt(stmt, scop, conf, memAccesses(stmt)))
+          }).toMap
+      }
+    }
+
+    for (d <- deps) {
+      val sourceStmt : String = d.getTupleNameIn()
+      val destStmt : String = d.getTupleNameOut()
+      stmtMemTrafficLock.synchronized {
+        result.put(d, stmtMemTraffic(sourceStmt) + stmtMemTraffic(destStmt))
+      }
     }
     return result.toMap
   }
@@ -712,6 +745,7 @@ object ScheduleSpaceUtils {
     }
     var result : Long = 0
     for (memLoc <- uniqueAccesses.keySet) {
+      var accessedUnif : isl.Set = null
       for (access <- uniqueAccesses(memLoc)) {
         var accessed : isl.Set = access.intersectDomain(stmtDomain).wrap()
         if (!accessed.isEmpty()) {
@@ -727,10 +761,88 @@ object ScheduleSpaceUtils {
           }
         }
         accessed = Isl.simplify(accessed)
-        result += countNPoints(accessed, conf)
+        if (accessedUnif == null)
+          accessedUnif = isl.Set.empty(accessed.getSpace)
+        accessedUnif = accessedUnif.union(accessed)
       }
+      if (accessedUnif != null)
+        result += countNPoints(accessedUnif.makeDisjoint(), conf)
     }
     return result
+  }
+
+  private def calcApproxMemTrafficSizeStmt(stmt : String, scop : ScopInfo, conf : Config, memAccesses : StmtMemAccesses) : Long = {
+    val paramVals : Map[String, Int] = conf.paramValMappings
+    val ctx : isl.Ctx = scop.getDomain.getCtx
+    val uniqueAccesses : HashMap[String, HashSet[isl.Map]] = HashMap.empty
+    val stmtDomain : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(scop.getDomain, Set(stmt)))
+    for (memLoc : String <- memAccesses.rds.keySet) {
+      if (!uniqueAccesses.contains(memLoc))
+        uniqueAccesses.put(memLoc, HashSet.empty)
+      memAccesses.rds(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access.toString()))).foreach(uniqueAccesses(memLoc).add(_))
+    }
+    for (memLoc : String <- memAccesses.wrs.keySet) {
+      if (!uniqueAccesses.contains(memLoc))
+        uniqueAccesses.put(memLoc, HashSet.empty)
+      memAccesses.wrs(memLoc).filterNot((access : isl.Map) => uniqueAccesses(memLoc).exists(_.toString().equals(access.toString()))).foreach(uniqueAccesses(memLoc).add(_))
+    }
+    var result : Long = 0
+    for (memLoc <- uniqueAccesses.keySet) {
+      result += calcApproxTrafficToArray(uniqueAccesses(memLoc).toSet, paramVals, stmtDomain)
+    }
+    return result
+  }
+
+  private def calcApproxTrafficToArray(accessRelations : Iterable[isl.Map], paramVals : Map[String, Int], stmtDomain : isl.Set) : Long = {
+    val nArrayDims : Int = accessRelations.head.dim(T_OUT)
+    val ctx : isl.Ctx = stmtDomain.getCtx
+    var accessedArrayParts : Iterable[isl.Set] = accessRelations.map((rel : isl.Map) => {
+      var accessed : isl.Set = rel.intersectDomain(stmtDomain).range
+      val nParam = accessed.getSpace.dim(T_PAR)
+      for (i <- 0 until nParam) {
+        val dimName : String = accessed.getDimName(T_PAR, i)
+        if (paramVals.contains(dimName))
+          accessed = accessed.fixVal(T_PAR, i, isl.Val
+            .fromInt(ctx, paramVals(dimName)))
+        else
+          // param value is unknown. make it zero allow counting of inner points
+          accessed = accessed.fixVal(T_PAR, i, isl.Val.fromInt(ctx, 0))
+      }
+      accessed
+    })
+
+    return (for (aDim <- 0 until nArrayDims) yield {
+      val dimSize : Long = accessedArrayParts.map(getSizeOfDim(_, aDim)).max
+      val subscriptMatrix : Array[Array[Rat]] = buildSubscriptMatrix(accessRelations, aDim)
+      val subscriptMatrixRank : Int = if (subscriptMatrix.isEmpty)
+        0
+      else Util.calcRowRank(Util.calcRowEchelonForm(subscriptMatrix, subscriptMatrix.size, subscriptMatrix(0).size))
+      math.pow(dimSize, subscriptMatrixRank).toLong
+    }).sum
+  }
+
+  private def buildSubscriptMatrix(accessRelations : Iterable[isl.Map], arrayDim : Int) : Array[Array[Rat]] = {
+    return accessRelations.map((rels : isl.Map) => {
+      var rows : List[Array[Rat]] = List.empty
+      rels.foreachBasicMap((rel : isl.BasicMap) => {
+        val accessDims : List[isl.Map] = Isl.splitMultiDimUnionMap(rel).map(isl.Map.fromUnionMap(_))
+        for (accessDim <- accessDims.take(arrayDim + 1)) {
+          val aff : isl.Aff = Isl.islMap2Aff(accessDim)
+          val coeffs : Array[Rat] = (0 until aff.dim(T_IN)).map((d : Int) => Rat(aff.getCoefficientVal(T_IN, d).getNumSi)).toArray
+          rows ::= coeffs
+        }
+      })
+      rows
+    }).flatten.toArray
+  }
+
+  private def getSizeOfDim(polytope : isl.Set, d : Int) : Long = {
+    if (polytope.isEmpty())
+      return 0
+    val projection : isl.Set = Isl.islSetProjectOntoDim(polytope, d)
+    val min : Long = projection.lexmin().samplePoint().getCoordinateVal(T_SET, 0).getNumSi
+    val max : Long = projection.lexmax().samplePoint().getCoordinateVal(T_SET, 0).getNumSi
+    return max - min
   }
 
   private def calcTrafficSizeOfDep(dep : isl.Map, srcAccessLocs : Set[String],

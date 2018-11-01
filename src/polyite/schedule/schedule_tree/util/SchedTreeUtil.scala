@@ -16,6 +16,8 @@ import polyite.schedule.schedule_tree.GroupDimsVisitor
 import polyite.schedule.schedule_tree.BandNode
 import polyite.schedule.schedule_tree.LeafNode
 import polyite.schedule.schedule_tree.SeqNode
+import polyite.config.Config
+import polyite.ScopInfo
 
 object SchedTreeUtil {
   def calcOrder(sched : isl.UnionMap, schedPrefix : List[isl.UnionMap], s1 : String, s2 : String,
@@ -112,7 +114,6 @@ object SchedTreeUtil {
     */
   def markLoops(n : ScheduleNode) : ScheduleNode = {
     val coeffMatrices : Map[String, List[Array[BigInt]]] = Isl.islUnionSetGetTupleNames(n.getDomain).map((_, List.empty)).toMap
-
     return n.accept(new LoopMarkVisitor, coeffMatrices)
   }
 
@@ -167,7 +168,7 @@ object SchedTreeUtil {
           if (n.bandGetPermutable() && n.bandNMember() > 1 && isInnermostBand(n, allowInnerSeq)) {
             val nMemb : Int = n.bandNMember()
             var tileSizesList : isl.ValList = isl.ValList.alloc(ctx, 0)
-            val tileSize : isl.Val = isl.Val.fromInt(ctx, 32)
+            val tileSize : isl.Val = isl.Val.fromInt(ctx, defaultTileSize)
             for (i <- 0 until nMemb)
               tileSizesList = tileSizesList.add(tileSize)
             val sp : isl.Space = isl.Space.setAlloc(ctx, 0, nMemb)
@@ -207,5 +208,18 @@ object SchedTreeUtil {
       .accept(new ElimSuperfluousSubTreesVisitor)
       .accept(new ElimSuperfluousDimNodesVisitor)
       .accept(new GroupDimsVisitor, deps.map((d : Dependence) => (d, d.map.detectEqualities())).toMap)
+  }
+
+  /**
+    * Given two schedules for a SCoP and the SCoP itself, check whether both schedules encode the same execution
+    * execution order of the statement instances. Beware that two schedules may be equivalent before tiling but not afterwards.
+    * Use {@link SchedTreeUtil#tileSchedule(Schedule, Int, Boolean)} to tile schedules.
+    */
+  def checkEquivalent(sched1 : isl.Schedule, sched2 : isl.Schedule, scop : ScopInfo) : Boolean = {
+    val sched1M : isl.UnionMap = sched1.getMap.intersectDomain(scop.getDomain).intersectParams(scop.getParams.params())
+    val sched2M : isl.UnionMap = sched2.getMap.intersectDomain(scop.getDomain).intersectParams(scop.getParams.params())
+    val order1 : isl.UnionMap = sched1M.lexLtUnionMap(sched1M)
+    val order2 : isl.UnionMap = sched2M.lexLtUnionMap(sched2M)
+    return order1.subtract(order2).isEmpty() && order2.subtract(order1).isEmpty()
   }
 }

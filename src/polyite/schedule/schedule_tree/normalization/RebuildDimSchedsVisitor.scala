@@ -50,34 +50,6 @@ class RebuildDimSchedsVisitor extends PartialSchedMapNormalizationVisitor {
     return coeffSpace
   }
 
-  //  private def constructArtificialDeps(sched : isl.UnionMap, domain : isl.UnionSet, domInfo : DomainCoeffInfo) : Iterable[Dependence] = {
-  //    val ctx : isl.Ctx = sched.getCtx
-  //    val artificialArray : isl.BasicSet = isl.BasicSet.readFromStr(ctx, "{ [0] }")
-  //    val empty : isl.UnionMap = isl.UnionMap.empty(sched.getSpace)
-  //    var artificialAccesses : isl.UnionMap = empty
-  //    domain.foreachSet((s0 : isl.Set) => {
-  //      val access : isl.Map = isl.Map.fromDomainAndRange(s0, artificialArray)
-  //      artificialAccesses = artificialAccesses.addMap(access)
-  //    })
-  //    artificialAccesses = artificialAccesses.intersectDomain(domain)
-  //    val depsA : Array[isl.UnionMap] = new Array(1)
-  //    val depsA1 : Array[isl.UnionMap] = new Array(1)
-  //    artificialAccesses = Isl.simplify(artificialAccesses)
-  //    artificialAccesses.computeFlow(artificialAccesses, artificialAccesses, sched.intersectDomain(domain), depsA, depsA1, null, null)
-  //    val deps : isl.UnionMap = depsA(0).union(depsA1(0))
-  //    val depsSeparated : Iterable[isl.BasicMap] = sepDepsFast(deps)
-  //
-  //    val depsSep : Iterable[Dependence] = depsSeparated map {
-  //      (m : isl.BasicMap) =>
-  //        {
-  //          val wrs : isl.BasicSet = ScheduleSpaceUtils.compSchedConstrForDep(m, domInfo, false)
-  //          val srs : isl.BasicSet = ScheduleSpaceUtils.compSchedConstrForDep(m, domInfo, true)
-  //          new Dependence(m, wrs, srs)
-  //        }
-  //    }
-  //    return depsSep
-  //  }
-
   private def sepDepsFast(deps : isl.UnionMap) : Set[isl.BasicMap] = {
     var result : HashSet[isl.BasicMap] = HashSet.empty
     deps.foreachMap((m : isl.Map) => {
@@ -154,47 +126,6 @@ class RebuildDimSchedsVisitor extends PartialSchedMapNormalizationVisitor {
 
     return (res, nBoundDims)
   }
-
-  //  // this is derived from Pluto+ -> Bondhugula2016
-  //  private def addCoeffMinCostraints(s : isl.Set, domInfo : DomainCoeffInfo) : (isl.Set, Int) = {
-  //    val nBoundDims : Int = domInfo.stmtInfo.size + 1
-  //    var res : isl.Set = s.insertDims(T_SET, 0, nBoundDims)
-  //
-  //    val lsp : isl.LocalSpace = isl.LocalSpace.fromSpace(res.getSpace)
-  //    val baseIneq : isl.Constraint = isl.Constraint.allocInequality(lsp)
-  //
-  //    for ((sInfo : StmtCoeffInfo, stmtIdx : Int) <- domInfo.stmtInfo.map(_._2).toList.zipWithIndex) {
-  //      val nStmtCoeffs : Int = 1 + sInfo.nrIt + domInfo.nrParPS
-  //      val signCombinations : Iterator[Array[Int]] = constructCombinations(Array.fill(nStmtCoeffs)(2))
-  //      for (signComb : Array[Int] <- signCombinations) {
-  //        var signIdx = 0
-  //        var constr : isl.Constraint = baseIneq.setCoefficientSi(T_SET, stmtIdx + 1, 1)
-  //        constr = constr.setCoefficientSi(T_SET, sInfo.cstIdx + nBoundDims, produceSign(signComb(signIdx)))
-  //        signIdx += 1
-  //        for (i <- sInfo.itStart until sInfo.itStart + sInfo.nrIt) {
-  //          constr = constr.setCoefficientSi(T_SET, i + nBoundDims, produceSign(signComb(signIdx)))
-  //          signIdx += 1
-  //        }
-  //        for (i <- sInfo.parStart until sInfo.parStart + domInfo.nrParPS) {
-  //          constr = constr.setCoefficientSi(T_SET, i + nBoundDims, produceSign(signComb(signIdx)))
-  //          signIdx += 1
-  //        }
-  //        res = res.addConstraint(constr)
-  //      }
-  //    }
-  //    System.gc()
-  //
-  //    var constr : isl.Constraint = baseIneq.setCoefficientSi(T_SET, 0, 1)
-  //    for (i <- 1 until nBoundDims) {
-  //      constr.setCoefficientSi(T_SET, i, -1)
-  //    }
-  //    res = res.addConstraint(constr)
-  //
-  //    constr = baseIneq.setCoefficientSi(T_SET, 0, 1)
-  //    res = res.addConstraint(constr)
-  //
-  //    return (res, nBoundDims)
-  //  }
 
   private def produceSign(in : Int) : Int = if (in == 1) 1 else -1
 

@@ -1,12 +1,14 @@
 package polyite.config
 
-import java.util.Properties
-import org.junit.Before
 import java.io.File
-import polyite.util.Rat
-import org.junit.Test
-import polyite.evolution.GeneticOperatorFactory.GeneticOperators
+import java.util.Properties
 import java.util.logging.Logger
+
+import org.junit.Before
+import org.junit.Test
+
+import polyite.evolution.GeneticOperatorFactory.GeneticOperators
+import polyite.util.Rat
 
 class ConfigGATest {
 
@@ -149,6 +151,22 @@ class ConfigGATest {
     props.put("barvinokBinary", "/bin/true")
     props.put("barvinokLibraryPath", "/lib")
     props.put("normalizeFeatures", "false")
+    props.put("evaluationStrategy", "CLASSIFIER")
+    props.put("learningSet", "test/polyite/fitness/classifier/test_learning_set_1.csv")
+    props.put("decTreeMinSamplesLeaf", i.toString())
+    i += 1
+    props.put("learningAlgorithm", "RANDOM_FOREST")
+    props.put("randForestNTree", i.toString())
+    i += 1
+    props.put("randForestMaxFeatures", (i % 9).toString)
+    i += 1
+    props.put("pythonVEnvLocation", "/tmp")
+    props.put("executionMode", "MPI")
+    props.put("migrationStrategy", "NEIGHBOR")
+    props.put("migrationRate", "3")
+    props.put("migrationVolume", "(1 / 4)")
+    props.put("scheduleEquivalenceRelation", "SCHED_TREE")
+    props.put("samplingStrategy", "CHERNIKOVA")
   }
 
   @Test
@@ -241,5 +259,18 @@ class ConfigGATest {
     assert(conf.barvinokBinary.toString().equals(props.getProperty("barvinokBinary")))
     assert(conf.barvinokLibraryPath.toString().equals(props.getProperty("barvinokLibraryPath")))
     assert(conf.normalizeFeatures.toString().equals(props.getProperty("normalizeFeatures")))
+    assert(conf.evaluationStrategy.toString().equals(props.getProperty("evaluationStrategy")))
+    assert(conf.learningSet.get.mkString(" ").equals(props.getProperty("learningSet")))
+    assert(conf.decTreeMinSamplesLeaf.get.toString.equals(props.getProperty("decTreeMinSamplesLeaf")))
+    assert(conf.learningAlgorithm.get.toString.equals(props.getProperty("learningAlgorithm")))
+    assert(conf.randForestNTree.get.toString.equals(props.getProperty("randForestNTree")))
+    assert(conf.randForestMaxFeatures.get.toString.equals(props.getProperty("randForestMaxFeatures")))
+    assert(conf.pythonVEnvLocation.get.toString.equals(props.getProperty("pythonVEnvLocation")))
+    assert(conf.executionMode.toString.equals(props.getProperty("executionMode")))
+    assert(conf.migrationStrategy.get.toString.equals(props.getProperty("migrationStrategy")))
+    assert(conf.migrationVolume.get.toString.equals(props.getProperty("migrationVolume")))
+    assert(conf.migrationRate.get.toString.equals(props.getProperty("migrationRate")))
+    assert(conf.scheduleEquivalenceRelation.toString().equals(props.getProperty("scheduleEquivalenceRelation")))
+    assert(conf.samplingStrategy.toString().equals(props.getProperty("samplingStrategy")))
   }
 }

@@ -27,10 +27,10 @@ object EvalSchedTreeGenerationDuration {
     * Measures the duration of schedule tree simplification {@code nMeasurements} times for each of the given schedules.
     * Produces an EvalResult for each of the schedules that contains the measured values.
     */
-  def eval(scheds : Iterable[Schedule], conf : Config, nMeasurements : Int, scop : ScopInfo) : Map[Schedule, EvalResult] = {
+  def eval(scheds : Iterable[Schedule], conf : Config, nMeasurements : Int, scop : ScopInfo) : Map[Schedule, Fitness] = {
     return scheds.map { (s : Schedule) =>
       {
-        val res : EvalResult = measureSched(s, conf, nMeasurements, scop)
+        val res : Fitness = EvalResultOnly(measureSched(s, conf, nMeasurements, scop))
         myLogger.info("benchmarking schedule " + s)
         (s, res)
       }

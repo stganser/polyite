@@ -12,20 +12,25 @@ import scala.util.Random
 import polyite.config.ConfigGA
 import polyite.schedule.Dependence
 import polyite.schedule.DomainCoeffInfo
-import polyite.schedule.LineSummand
-import polyite.schedule.RaySummand
 import polyite.schedule.Schedule
 import polyite.schedule.ScheduleSpaceUtils
-import polyite.schedule.ScheduleSummand
 import polyite.schedule.ScheduleUtils
 import polyite.schedule.ScheduleVectorUtils
-import polyite.schedule.VertexSummand
 import polyite.util.Rat
 import polyite.util.Util
-import polyite.util.Util.GeneratorsRat
 
 import isl.Isl
 import isl.IslException
+import polyite.ScopInfo
+import polyite.schedule.sampling.Polyhedron
+import polyite.schedule.sampling.ChernikovaSamplingStrategy
+import polyite.schedule.sampling.ChernikovaSamplingStrategy.GeneratorsRat
+import polyite.schedule.sampling.VertexSummand
+import polyite.schedule.sampling.ScheduleSummand
+import polyite.schedule.sampling.RaySummand
+import polyite.schedule.sampling.LineSummand
+import polyite.schedule.sampling.SamplingStrategy
+import polyite.schedule.sampling.SamplingStrategyParams
 
 /**
   * Schedule mutation strategies.
@@ -38,7 +43,7 @@ object MutationStrategies {
     * depends on {@code conf.probabilityToMutateSchedRow} and decreases with
     * growing values of {@code generation} (simulated annealing).
     */
-  def replaceDims(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+  def replaceDims(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
     myLogger.info("Applying replaceDims.")
     val tmpCtx : isl.Ctx = Isl.initCtx()
     val sTmpCtx : Schedule = s.transferToCtx(tmpCtx)
@@ -50,7 +55,7 @@ object MutationStrategies {
         tmpCtx.setMaxOperations(conf.islComputeout)
         val newScheduleDim : Option[(List[Rat], Set[ScheduleSummand])] =
           try {
-            createNewScheduleVector(newSched, dim, conf)
+            createNewScheduleVector(newSched, dim, conf, sampler)
           } catch {
             case e : IslException => {
               //              tmpCtx.resetError()
@@ -74,12 +79,13 @@ object MutationStrategies {
       }
     }
     val newSchedSimplified : Schedule = ScheduleUtils.simplify(newSched.transferToCtx(s.domInfo.ctx))
-    return Some(ScheduleUtils.expandToFullSchedule(conf, conf.maxNumRays, conf.maxNumLines, newSchedSimplified,
+    val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
+    return Some(ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSchedSimplified,
       ScheduleUtils.generateLinIndepScheduleVector))
   }
 
   private def createNewScheduleVector(s : Schedule, dim : Int,
-    conf : ConfigGA) : Option[(List[Rat], Set[ScheduleSummand])] = {
+    conf : ConfigGA, sampler : SamplingStrategy) : Option[(List[Rat], Set[ScheduleSummand])] = {
     val domInfo : DomainCoeffInfo = s.domInfo
     val carriedDeps : Set[Dependence] =
       if (dim == 0)
@@ -89,15 +95,16 @@ object MutationStrategies {
     val uncarriedDeps : Set[Dependence] = s.deps -- carriedDeps
     val newlyCarriedDeps : Set[Dependence] = s.getDepsNewlyCarriedBy(dim)
 
+    val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
+
     if (!(uncarriedDeps.isEmpty && newlyCarriedDeps.isEmpty)) {
       val (coeffSpace : isl.Set, _ : Set[Dependence]) = ScheduleSpaceUtils
         .calculateCoeffSpace(uncarriedDeps, newlyCarriedDeps, domInfo.universe)
-      val g : GeneratorsRat = Util.constraints2GeneratorsRat(coeffSpace, conf.moveVertices, conf.rayPruningThreshold)
+      val p : Polyhedron = sampler.preparePolyhedron(coeffSpace, conf)
 
-      return Some(ScheduleUtils.generateScheduleVector(g, conf.rayCoeffsRange, -conf.lineCoeffsRange, conf.lineCoeffsRange,
-        conf.maxNumRays, conf.maxNumLines, conf))
+      return Some(sampler.sampleCoeffVect(p, s.domInfo, conf, samplerParams))
     } else {
-      return ScheduleUtils.generateLinIndepScheduleVector1(s, dim, conf.maxNumRays, conf.maxNumLines, conf)
+      return ScheduleUtils.generateLinIndepScheduleVector1(s, dim, sampler, samplerParams, conf)
     }
   }
 
@@ -106,7 +113,7 @@ object MutationStrategies {
     * is randomly chosen and increases with growing values of {@code generation}
     * (simluated annealing).
     */
-  def replaceSuffix(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+  def replaceSuffix(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
     if (s.numDims < 2)
       return None
     var numDims2Preserve : Int = s.numDims - (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
@@ -116,7 +123,7 @@ object MutationStrategies {
     for (i <- 0 until numDims2Preserve)
       newSched.addForeignDim(s, i)
     val schedSet : HashSet[Schedule] = ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines,
-      conf, 1, newSched.deps.filterNot(newSched.getCarriedDeps.contains))
+      conf, 1, newSched.deps.filterNot(newSched.getCarriedDeps.contains), sampler)
 
     // The completed schedule is a full schedule by definition.
     return Some(schedSet.head)
@@ -127,7 +134,7 @@ object MutationStrategies {
     * is randomly chosen and increases with growing values of {@code generation}
     * (simluated annealing).
     */
-  def replacePrefix(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+  def replacePrefix(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
     if (s.numDims < 2)
       return None
     var numDims2Replace : Int = (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
@@ -138,34 +145,35 @@ object MutationStrategies {
      * replacePrefix degenerates to a full replacement of the schedule if
      * deps2CarryStrongly = s.deps!
      */
-    var deps2CarryStrongly : Set[Dependence] = s.getDependencesCarriedUpToDim(numDims2Replace - 1)
+    val deps2CarryStrongly : Set[Dependence] = s.getDependencesCarriedUpToDim(numDims2Replace - 1)
+    val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
 
     val newSched : Schedule =
       if (deps2CarryStrongly.isEmpty) {
         val prefixLength : Int = Random.nextInt(numDims2Replace + 1)
-        val searchSpaceGenerators : ListBuffer[GeneratorsRat] = ListBuffer.empty
+        val polyhedra : ListBuffer[Polyhedron] = ListBuffer.empty
         var uncarriedDeps : Set[Dependence] = s.deps
         for (i : Int <- 0 until prefixLength) {
           val coeffSpace : isl.Set = ScheduleSpaceUtils.calculateCoeffSpace(s.domInfo, uncarriedDeps, false)
-          searchSpaceGenerators.append(Util.constraints2GeneratorsRat(coeffSpace, conf.moveVertices, conf.rayPruningThreshold))
+          polyhedra.append(sampler.preparePolyhedron(coeffSpace, conf))
           uncarriedDeps = uncarriedDeps.filterNot(ScheduleSpaceUtils.checkCarried(s.domInfo, coeffSpace))
         }
         val tmp : Schedule = new Schedule(s.domInfo, s.deps)
-        for (g : GeneratorsRat <- searchSpaceGenerators) {
-          val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = ScheduleUtils.generateScheduleVector(g,
-            conf.rayCoeffsRange, -conf.lineCoeffsRange, conf.lineCoeffsRange, conf.maxNumRays, conf.maxNumLines, conf)
+        for (p : Polyhedron <- polyhedra) {
+          val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = sampler.sampleCoeffVect(p, s.domInfo, conf,
+            samplerParams)
           tmp.addScheduleVector(coeffs, schedSummands)
         }
         tmp
       } else {
         ScheduleUtils.completeSchedule(new Schedule(s.domInfo, s.deps), conf.maxNumRays, conf.maxNumLines,
-          conf, 1, deps2CarryStrongly).head
+          conf, 1, deps2CarryStrongly, sampler).head
       }
 
     for (i <- numDims2Replace until s.numDims)
       newSched.addForeignDim(s, i)
     val newSchedSimplified : Schedule = ScheduleUtils.simplify(newSched)
-    return Some(ScheduleUtils.expandToFullSchedule(conf, conf.maxNumRays, conf.maxNumLines, newSchedSimplified,
+    return Some(ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSchedSimplified,
       ScheduleUtils.generateLinIndepScheduleVector))
   }
 
@@ -186,7 +194,11 @@ object MutationStrategies {
     * necessary to replace the suffix of a mutated schedule with newly generated
     * suitable dimensions in order to preserve legality.
     */
-  def mutateGeneratorCoeffs(conf : ConfigGA, generation : Int)(s : Schedule) : Option[Schedule] = {
+  def mutateGeneratorCoeffs(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
+
+    if (sampler != ChernikovaSamplingStrategy)
+      throw new IllegalStateException("Generator coefficient mutation only works if the sampling strategy relies on Chernikova.")
+
     val newSched : Schedule = new Schedule(s.domInfo, s.deps)
     val dimsIter : Iterator[Int] = Range(0, s.numDims).iterator
     val currProbabilityToMutateSchedRow : Double = annealMutationProbability(conf, generation,
@@ -253,14 +265,15 @@ object MutationStrategies {
         myLogger.warning("Generator mutation produced an invalid schedule vector.")
         newSched.removeLastScheduleVector
         // The completed schedule is a full schedule by definition.
-        return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, prevUncarried).head)
+        return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, prevUncarried, sampler).head)
       }
     }
     val stillUncarried : Set[Dependence] = newSched.deps -- newSched.getCarriedDeps
     // The completed schedule is a full schedule by definition.
     if (!stillUncarried.isEmpty)
-      return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, stillUncarried).head)
-    return Some(ScheduleUtils.expandToFullSchedule(conf, conf.maxNumRays, conf.maxNumLines, newSched,
+      return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, stillUncarried, sampler).head)
+    val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
+    return Some(ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSched,
       ScheduleUtils.generateLinIndepScheduleVector))
   }
 

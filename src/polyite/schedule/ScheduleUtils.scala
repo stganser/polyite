@@ -1,35 +1,33 @@
 package polyite.schedule
 
-import scala.math.BigInt.int2bigInt
-import isl.Conversions._
-import isl.VoidCallback1
-import isl.VoidCallback2
-import isl.Isl.TypeAliases._
-import polyite.util.Util.vec2List
-import org.exastencils.schedopt.chernikova.Generators
-import org.exastencils.schedopt.chernikova.Chernikova
-import scala.collection.parallel.mutable.ParArray
-import polyite.util.Rat
-import isl.Isl
-import scala.collection.mutable.ListBuffer
-import isl.IslException
-import scala.util.Random
+import java.util.logging.Logger
+
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.collection.mutable.ArrayBuffer
-import java.util.logging.Logger
-import polyite.util.Util
-import polyite.config.Config
-import polyite.config.MinimalConfig
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.mutable.ParArray
 import scala.concurrent.forkjoin.ForkJoinPool
-import polyite.config.ConfigGA
+import scala.util.Random
+
+import isl.Conversions.convertLambdaToVoidCallback1
+import isl.Conversions.convertLambdaToVoidCallback2
+import isl.Conversions.convertValToBigInt
+import isl.Isl
+import isl.Isl.TypeAliases.T_IN
+import isl.Isl.TypeAliases.T_OUT
+import isl.Isl.TypeAliases.T_PAR
+import isl.Isl.TypeAliases.T_SET
+import isl.IslException
+import polyite.config.Config
 import polyite.config.MinimalConfig.NumGeneratorsLimit
-import java.math.BigInteger
-import polyite.util.Util.GeneratorsRat
-import polyite.config.MinimalConfig.NumGeneratorsLimit
-import polyite.config.MinimalConfig.RandLimit
-import polyite.config.MinimalConfig.LimitedGenerators
+import polyite.schedule.hash.ScheduleHash
+import polyite.util.Rat
+import polyite.util.Util
+import polyite.schedule.sampling.SamplingStrategy
+import polyite.schedule.sampling.ScheduleSummand
+import polyite.schedule.sampling.SamplingStrategyParams
+import polyite.schedule.sampling.Polyhedron
 
 /**
   * Utilities for handling schedules.
@@ -79,7 +77,8 @@ object ScheduleUtils {
     * Filters {@code deps} for dependencies that are carried strongly by the
     * schedule given through the union map {@code s}.
     */
-  def getDepsCarriedBySchedule(s : isl.UnionMap,
+  def getDepsCarriedBySchedule(
+    s : isl.UnionMap,
     deps : Set[Dependence]) : Set[Dependence] = {
     return deps.filter { d => getDirectionOfDep(s, d).isPositiveOnly }
   }
@@ -88,7 +87,8 @@ object ScheduleUtils {
     * Filters {@code deps} for dependencies that are carried at least weakly by
     * the schedule given through the union map {@code s}.
     */
-  def getDepsCarriedWeaklyBySchedule(s : isl.UnionMap,
+  def getDepsCarriedWeaklyBySchedule(
+    s : isl.UnionMap,
     deps : Set[Dependence]) : Set[Dependence] = {
     return deps.filter { d =>
       {
@@ -119,7 +119,8 @@ object ScheduleUtils {
         val v : Array[Rat] = sched.getScheduleVector(dim).toArray
         var sttmnts : List[String] = domInfo.stmtInfo.keys.toList
         if (!sttmnts.isEmpty) {
-          val fstSttmntConstCoeffs : List[Rat] = getConstCoeffsForSttmnt(v,
+          val fstSttmntConstCoeffs : List[Rat] = getConstCoeffsForSttmnt(
+            v,
             domInfo, domInfo.stmtInfo(sttmnts.head))
           if (!sttmnts.forall { s =>
             getConstCoeffsForSttmnt(v, domInfo,
@@ -131,83 +132,6 @@ object ScheduleUtils {
         result.addForeignDim(sched, dim)
     }
     return result
-  }
-
-  /**
-    * Generates a coefficient for a Chernikova line generator. The coefficient
-    * will be an integer value from the set {@code [minLineCoeff, maxLineCoeff] \\ {0}}.
-    */
-  def getRandLineCoeff(minLineCoeff : Int, maxLineCoeff : Int) : Rat = {
-    if (minLineCoeff > maxLineCoeff)
-      throw new IllegalArgumentException("minLineCoeff > maxLineCoeff: " + minLineCoeff + " > " + maxLineCoeff)
-
-    if (minLineCoeff == maxLineCoeff)
-      return Rat(minLineCoeff)
-    var c : Int = 0
-    while (c == 0)
-      c = Random.nextInt(maxLineCoeff - minLineCoeff + 1) + minLineCoeff
-    return Rat(c)
-  }
-
-  /**
-    * Generates a coefficient for a Chernikova ray generator. The coefficient
-    * will be an integer value from the range (0, maxRayCoeff].
-    */
-  def getRandRayCoeff(maxRayCoeff : Int) : Rat =
-    Rat(Random.nextInt(maxRayCoeff + 1) + 1)
-
-  /**
-    * Generates a schedule coefficient vector from the given set of Chernikova
-    * generators.
-    * @param maxRayCoeff Coefficients for rays are selected from the interval {@code (0, maxRayCoeff]}.
-    * @param minLineCoeff Coefficients for lines are selected from the set {@code [minLineCoeff, maxLineCoeff] \\ {0}}.
-    * @param maxLineCoeff Coefficients for lines are selected from the set {@code [minLineCoeff, maxLineCoeff] \\ {0}}.
-    * @param maxNumRays maximum number of rays per linear combination that forms a schedule coefficient vector
-    * @param maxNumRays maximum number of lines per linear combination that forms a schedule coefficient vector
-    */
-  def generateScheduleVector(g : GeneratorsRat, maxRayCoeff : Int, minLineCoeff : Int, maxLineCoeff : Int,
-    maxNumRays : NumGeneratorsLimit, maxNumLines : NumGeneratorsLimit, conf : Config) : (List[Rat], Set[ScheduleSummand]) = {
-
-    val verticesRand : List[List[Rat]] = Random.shuffle(g.vertices)
-
-    val raysRand : List[List[Rat]] = Random.shuffle(g.rays)
-    val linesRand : List[List[Rat]] = Random.shuffle(g.lines)
-
-    val numRays = maxNumRays match {
-      case MinimalConfig.AllGenerators =>
-        Random.nextInt(raysRand.size + 1)
-      case MinimalConfig.LimitedGenerators(n) =>
-        Random.nextInt(math.min(n, raysRand.size) + 1)
-      case MinimalConfig.RandLimit =>
-        Random.nextInt(raysRand.size + 1)
-    }
-
-    val numLines = maxNumLines match {
-      case MinimalConfig.AllGenerators =>
-        Random.nextInt(linesRand.size + 1)
-      case MinimalConfig.LimitedGenerators(n) =>
-        Random.nextInt(math.min(n, linesRand.size) + 1)
-      case MinimalConfig.RandLimit =>
-        Random.nextInt(linesRand.size + 1)
-    }
-    val v = verticesRand.head
-    val chosenRays = raysRand.take(numRays)
-    val chosenLines = linesRand.take(numLines)
-    val schedSummands : HashSet[ScheduleSummand] = HashSet.empty
-
-    var coeffs : List[Rat] = v
-    schedSummands.add(new VertexSummand(v, Rat(BigInt(1))))
-    for (r : List[Rat] <- chosenRays) {
-      val c : Rat = getRandRayCoeff(maxRayCoeff)
-      coeffs = ScheduleVectorUtils.add(coeffs, r, c)
-      schedSummands.add(new RaySummand(r, c))
-    }
-    for (l : List[Rat] <- chosenLines) {
-      val c : Rat = getRandLineCoeff(minLineCoeff, maxLineCoeff)
-      coeffs = ScheduleVectorUtils.add(coeffs, l, c)
-      schedSummands.add(new LineSummand(l, c))
-    }
-    return (coeffs, schedSummands.toSet)
   }
 
   /**
@@ -227,34 +151,26 @@ object ScheduleUtils {
     * configuration option {@code islComputeout}.
     */
   def completeSchedule(sched : Schedule, numRaysLimit : NumGeneratorsLimit, numLinesLimit : NumGeneratorsLimit,
-    conf : Config, numCompletions : Int, deps2CarryStrongly : Set[Dependence]) : HashSet[Schedule] = {
+    conf : Config, numCompletions : Int, deps2CarryStrongly : Set[Dependence], sampler : SamplingStrategy) : HashSet[Schedule] = {
 
-    // Construct the schedule space
-    val scheduleSpaceGenerators : Iterable[GeneratorsRat] = ScheduleSpaceUtils.constructScheduleSpace(sched, deps2CarryStrongly, conf)
+    // Sample a schedule space region
+    val searchSpaceRegion : Iterable[Polyhedron] = ScheduleSpaceUtils.constructScheduleSpace(sched, deps2CarryStrongly,
+      sampler.preparePolyhedron(_, _), conf)
 
-    // Find out the maximum number of generators of all dimensions
-    val maxNumRaysAllDims : Int = ScheduleSpaceUtils.getMaxNumRays(scheduleSpaceGenerators)
-    val maxNumLinesAllDims : Int = ScheduleSpaceUtils.getMaxNumLines(scheduleSpaceGenerators)
-
-    // Extract as many schedules from the above constructed schedule space as
-    // required.
+    // Extract as many schedules from the above constructed schedule space region as required.
     var result : HashSet[Schedule] = HashSet.empty
     for (i <- 0 until numCompletions) {
 
-      val currNumRaysLimit : NumGeneratorsLimit = numRaysLimit match {
-        case RandLimit => LimitedGenerators(Random.nextInt(maxNumRaysAllDims) + 1)
-        case _         => numRaysLimit
-      }
-      val currNumLinesLimit : NumGeneratorsLimit = numLinesLimit match {
-        case RandLimit => LimitedGenerators(Random.nextInt(maxNumLinesAllDims) + 1)
-        case _         => numLinesLimit
-      }
+      val samplerParams : SamplingStrategyParams = sampler.prepareSamplingStrategyParams(searchSpaceRegion, conf, numRaysLimit, numLinesLimit)
 
       val newSched : Schedule = sched.clone
-      val gIter : Iterator[GeneratorsRat] = scheduleSpaceGenerators.iterator
+      val gIter : Iterator[Polyhedron] = searchSpaceRegion.iterator
       while (gIter.hasNext && newSched.getCarriedDeps.size < newSched.deps.size) {
-        val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = generateScheduleVector(gIter.next(),
-          conf.rayCoeffsRange, -conf.lineCoeffsRange, conf.lineCoeffsRange, currNumRaysLimit, currNumLinesLimit, conf)
+        if (Thread.interrupted())
+          throw new InterruptedException()
+        val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = sampler.sampleCoeffVect(
+          gIter.next(),
+          newSched.domInfo, conf, samplerParams)
         newSched.addScheduleVector(coeffs, schedSummands)
       }
       val schedCleaned : Schedule = simplify(newSched)
@@ -264,7 +180,7 @@ object ScheduleUtils {
        * Otherwise we were asked to generate a schedule prefix.
        */
       if (schedCleaned.deps.size == (schedCleaned.getCarriedDeps.size)) {
-        val fullSched : Schedule = expandToFullSchedule(conf, currNumRaysLimit, currNumLinesLimit, schedCleaned,
+        val fullSched : Schedule = expandToFullSchedule(conf, sampler, samplerParams, schedCleaned,
           generateLinIndepScheduleVector)
         result.add(fullSched)
       } else
@@ -320,10 +236,16 @@ object ScheduleUtils {
     *
     * @param maxNumRays maximum number of rays per linear combination that forms a schedule coefficient vector
     * @param maxNumLines maximum number of lines per linear combination that forms a schedule coefficient vector
+    * @param domInfo models the schedule coefficient vector space
+    * @param maxNumScheds the number of schedules to generate
+    * @param sampler strategy for sampling schedules.
+    * @param hashSched this function determines the criterion according to which two schedules are considered to be equivalent.
+    * @param conf configuration properties.
     */
   def genRandSchedules(domInfo : DomainCoeffInfo, deps : Set[Dependence], maxNumScheds : Int,
-    maxNumRays : NumGeneratorsLimit, maxNumLines : NumGeneratorsLimit, conf : Config) : Set[Schedule] =
-    genRandSchedules(domInfo, deps, maxNumScheds, Set.empty, maxNumRays, maxNumLines, conf)
+    maxNumRays : NumGeneratorsLimit, maxNumLines : NumGeneratorsLimit, conf : Config, sampler : SamplingStrategy,
+    hashSched : Schedule => ScheduleHash) : Set[Schedule] =
+    genRandSchedules(domInfo, deps, maxNumScheds, Set.empty, maxNumRays, maxNumLines, conf, sampler, hashSched)
 
   /**
     * Generates a set of random schedules. Any schedules contained by {@code basis}
@@ -331,13 +253,20 @@ object ScheduleUtils {
     * max(|basis|, maxNumScheds) schedules.
     *
     * @param maxNumRays maximum number of rays per linear combination that forms a schedule coefficient vector
-    * @param maxNumRays maximum number of lines per linear combination that forms a schedule coefficient vector
+    * @param maxNumLines maximum number of lines per linear combination that forms a schedule coefficient vector
+    * @param domInfo models the schedule coefficient vector space
+    * @param maxNumScheds the number of schedules to generate
+    * @param basis Set of schedules to add to until its size is at least {@code maxNumScheds}.
+    * @param sampler strategy for sampling schedules.
+    * @param hashSched this function determines the criterion according to which two schedules are considered to be equivalent.
+    * @param conf configuration properties.
     */
-  def genRandSchedules(domInfo : DomainCoeffInfo,
+  def genRandSchedules(
+    domInfo : DomainCoeffInfo,
     deps : Set[Dependence], maxNumScheds : Int, basis : Set[Schedule], maxNumRays : NumGeneratorsLimit,
-    maxNumLines : NumGeneratorsLimit, conf : Config) : Set[Schedule] = {
-    val scheds : HashSet[Schedule] = HashSet.empty
-    basis.map(scheds.add)
+    maxNumLines : NumGeneratorsLimit, conf : Config, sampler : SamplingStrategy, hashSched : Schedule => ScheduleHash) : Set[Schedule] = {
+    val scheds : HashMap[ScheduleHash, Schedule] = HashMap.empty
+    basis.map((s : Schedule) => scheds.put(hashSched(s), s))
 
     def genScheds(idx : Int)(x : Unit) {
       var numFailures = 0
@@ -353,15 +282,17 @@ object ScheduleUtils {
 
       while (continue) {
         val numSchedsAtOnce : Int = scheds.synchronized {
-          math.min(Random.nextInt(conf.maxNumSchedsAtOnce) + 1,
+          math.min(
+            Random.nextInt(conf.maxNumSchedsAtOnce) + 1,
             maxNumScheds - scheds.size)
         }
-        val args : Array[Any] = Array(new Schedule(domInfo, deps), maxNumRays, maxNumLines, conf, numSchedsAtOnce, deps)
-        val schedsMaybe : Option[Iterable[Schedule]] = Util.runWithTimeout(args,
+        val args : Array[Any] = Array(new Schedule(domInfo, deps), maxNumRays, maxNumLines, conf, numSchedsAtOnce, deps, sampler)
+        val schedsMaybe : Option[Iterable[Schedule]] = Util.runWithTimeout(
+          args,
           ((args : Array[Any]) => ScheduleUtils.completeSchedule(
             args(0).asInstanceOf[Schedule], args(1).asInstanceOf[NumGeneratorsLimit],
             args(2).asInstanceOf[NumGeneratorsLimit], args(3).asInstanceOf[Config], args(4).asInstanceOf[Int],
-            args(5).asInstanceOf[Set[Dependence]])), conf.randSchedsTimeout * 1000)
+            args(5).asInstanceOf[Set[Dependence]], args(6).asInstanceOf[SamplingStrategy])), conf.randSchedsTimeout * 1000)
         var addedAny : Boolean = false
         schedsMaybe match {
           case None => myLogger.warning("(schedule gen worker #" + idx
@@ -373,12 +304,15 @@ object ScheduleUtils {
                 ScheduleUtils.assertNoUnneccessaryDimsInSuffix(s)
 
                 scheds.synchronized {
-                  if (scheds.size < maxNumScheds)
-                    if (scheds.add(s)) {
+                  if (scheds.size < maxNumScheds) {
+                    val h : ScheduleHash = hashSched(s)
+                    if (!scheds.contains(h)) {
+                      scheds.put(h, s)
                       myLogger.info("(schedule gen worker #" + idx
                         + ")New random schedule: " + s.toString())
                       addedAny = true
                     }
+                  }
                 }
               }
             }
@@ -395,7 +329,7 @@ object ScheduleUtils {
       schedGenWorkers(i) = genScheds(i)
     schedGenWorkers.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(conf.numScheduleGenThreads))
     schedGenWorkers.map(f => f(()))
-    return scheds.toSet
+    return scheds.values.toSet
   }
 
   /**
@@ -410,8 +344,8 @@ object ScheduleUtils {
     * interrupted or if number of required Isl-operations exceeds the
     * configuration option {@code islComputeout}.
     */
-  def expandToFullSchedule(conf : Config, maxNumRays : NumGeneratorsLimit,
-    maxNumLines : NumGeneratorsLimit, sched : Schedule, linIndepSchedVectGen : (Schedule, NumGeneratorsLimit, NumGeneratorsLimit, Config) => Option[(List[Rat], Set[ScheduleSummand])]) : Schedule = {
+  def expandToFullSchedule(conf : Config, sampler : SamplingStrategy, samplerParams : SamplingStrategyParams,
+    sched : Schedule, linIndepSchedVectGen : (Schedule, SamplingStrategy, SamplingStrategyParams, Config) => Option[(List[Rat], Set[ScheduleSummand])]) : Schedule = {
 
     /*
      * Use an own ISL context in here in order to be able to work with
@@ -426,7 +360,7 @@ object ScheduleUtils {
     def computeNewSchedDim() {
       tmpCtx.setMaxOperations(conf.islComputeout)
       tmpCtx.resetOperations()
-      newSchedDim = linIndepSchedVectGen(fullSchedTmpCtx, maxNumRays, maxNumLines, conf)
+      newSchedDim = linIndepSchedVectGen(fullSchedTmpCtx, sampler, samplerParams, conf)
       tmpCtx.resetOperations()
       tmpCtx.setMaxOperations(0)
     }
@@ -434,6 +368,8 @@ object ScheduleUtils {
     try {
       computeNewSchedDim()
       while (newSchedDim.isDefined) {
+        if (Thread.interrupted())
+          throw new InterruptedException()
         val coeffs : List[Rat] = newSchedDim.get._1
         val schedSummands : Set[ScheduleSummand] = newSchedDim.get._2
         fullSchedTmpCtx.addScheduleVector(coeffs, schedSummands)
@@ -467,9 +403,9 @@ object ScheduleUtils {
     * with {@code v} being a schedule coefficient vector that meets the criteria
     * described above.
     */
-  def generateLinIndepScheduleVector(s : Schedule, maxNumRays : NumGeneratorsLimit,
-    maxNumLines : NumGeneratorsLimit, conf : Config) : Option[(List[Rat], Set[ScheduleSummand])] = {
-    return generateLinIndepScheduleVector1(s, s.numDims, maxNumRays, maxNumLines, conf)
+  def generateLinIndepScheduleVector(s : Schedule, sampler : SamplingStrategy, samplerParams : SamplingStrategyParams,
+    conf : Config) : Option[(List[Rat], Set[ScheduleSummand])] = {
+    return generateLinIndepScheduleVector1(s, s.numDims, sampler : SamplingStrategy, samplerParams : SamplingStrategyParams, conf)
   }
 
   /**
@@ -484,8 +420,8 @@ object ScheduleUtils {
     * with {@code v} being a schedule coefficient vector that meets the criteria
     * described above.
     */
-  def generateLinIndepScheduleVector1(s : Schedule, maxDim : Int, maxNumRays : NumGeneratorsLimit,
-    maxNumLines : NumGeneratorsLimit, conf : Config) : Option[(List[Rat], Set[ScheduleSummand])] = {
+  def generateLinIndepScheduleVector1(s : Schedule, maxDim : Int, sampler : SamplingStrategy,
+    samplerParams : SamplingStrategyParams, conf : Config) : Option[(List[Rat], Set[ScheduleSummand])] = {
     if (maxDim < 0 || maxDim > s.numDims)
       throw new IllegalArgumentException("maxDim must be from the interval [0, "
         + s.numDims + "(: " + maxDim)
@@ -501,16 +437,16 @@ object ScheduleUtils {
     val randLinIndepBSet : isl.BasicSet = linIndepBSets
       .getBasicSet(Random.nextInt(linIndepBSets.nBasicSet()))
 
-    val g : GeneratorsRat = Util.constraints2GeneratorsRat(randLinIndepBSet, conf.moveVertices, conf.rayPruningThreshold)
-    return Some(generateScheduleVector(g, conf.rayCoeffsRange, -conf.lineCoeffsRange, conf.lineCoeffsRange, maxNumRays,
-      maxNumLines, conf))
+    val p : Polyhedron = sampler.preparePolyhedron(randLinIndepBSet, conf)
+    return Some(sampler.sampleCoeffVect(p, s.domInfo, conf, samplerParams))
   }
 
   /**
     * Takes the schedule union map presentation {@code m} and converts it into
     * a coefficient matrix according to {@code domInfo}.
     */
-  def islUnionMap2CoeffMatrix(domInfo : DomainCoeffInfo,
+  def islUnionMap2CoeffMatrix(
+    domInfo : DomainCoeffInfo,
     m : isl.UnionMap) : List[Array[BigInt]] = {
     val matrix : ArrayBuffer[Array[BigInt]] = ArrayBuffer.empty
     val dimList : List[isl.UnionMap] = Isl.splitMultiDimUnionMap(m)
@@ -578,111 +514,12 @@ object ScheduleUtils {
     return schedule
   }
 
-  def getGeneratorCoeffs(g : Generators, v : List[BigInt],
-    ctx : isl.Ctx) : (isl.Set, Generators2CoeffIndices) = {
-    val vertices : List[List[BigInt]] = g.vertices.map(t => {
-      if ((!t._2.isValidInt && t._2.intValue() == 0))
-        throw new IllegalArgumentException("Cannot handle rational numbers.")
-      t._1.toList
-    }).toList
-    val rays : List[List[BigInt]] = g.rays.map(vec2List).toList
-    val lines : List[List[BigInt]] = g.lines.map(vec2List).toList
-
-    val generatorsWithIdx : List[(Array[BigInt], Int)] = (vertices ++ rays ++ lines)
-      .map(_.toArray).zipWithIndex
-
-    /*
-     * build an Isl set (LP) that contains all coefficients for convex linear
-     * combinations of generators from g that form v.
-     */
-    val nVCoeffs : Int = vertices.size
-    val vCoeffsStart : Int = 0
-    val nRCoeffs : Int = rays.size
-    val rCoeffsStart = nVCoeffs
-    val nLCoeffs : Int = lines.size
-    val lCoeffsStart = nVCoeffs + nRCoeffs
-
-    val nCoeffs : Int = nVCoeffs + nRCoeffs + nLCoeffs
-
-    var validChernikovaCoeffs : isl.Set = isl.Set.universe(isl.Space
-      .setAlloc(ctx, 0, nCoeffs))
-    val localSpace : isl.LocalSpace = isl.LocalSpace.fromSpace(validChernikovaCoeffs.getSpace)
-    // Construct the constraints for the basic linear combination
-    for (dim <- 0 until v.size) {
-      var dimConstraint : isl.Constraint = isl.Constraint.allocEquality(localSpace)
-      for ((g, idx) <- generatorsWithIdx) {
-        dimConstraint = dimConstraint.setCoefficientVal(T_SET, idx,
-          isl.Val.fromBigInteger(ctx, g(dim).bigInteger))
-      }
-      dimConstraint = dimConstraint.setConstantVal(isl.Val.fromBigInteger(ctx,
-        v(dim).bigInteger.negate()))
-      validChernikovaCoeffs = validChernikovaCoeffs.addConstraint(dimConstraint)
-    }
-
-    def makeVarsPos(min : Int, nVars : Int) {
-      for (vIdx <- min until min + nVars) {
-        var constr = isl.Constraint.allocInequality(localSpace)
-        constr = constr.setCoefficientSi(T_SET, vIdx, 1)
-        validChernikovaCoeffs = validChernikovaCoeffs.addConstraint(constr)
-      }
-    }
-
-    // The coefficients of rays must be positive.
-    makeVarsPos(rCoeffsStart, nRCoeffs)
-
-    /* 
-     * The coefficients of vertices must be positive and sum up to 1. Otherwise
-     * the linear combination isn't convex.
-     */
-    makeVarsPos(vCoeffsStart, nVCoeffs)
-    var coeffSumConstr : isl.Constraint = isl.Constraint.allocEquality(localSpace)
-    coeffSumConstr = coeffSumConstr.setConstantSi(-1)
-    for (vIdx <- vCoeffsStart until vCoeffsStart + nVCoeffs)
-      coeffSumConstr = coeffSumConstr.setCoefficientSi(T_SET, vIdx, 1)
-    validChernikovaCoeffs = validChernikovaCoeffs.addConstraint(coeffSumConstr)
-
-    // Construct a mapping from generators to coefficient indices.
-    val vertexCoeffsMapping : HashMap[List[BigInt], Int] = HashMap.empty
-    for ((vertex, idx) <- vertices.zipWithIndex)
-      vertexCoeffsMapping.put(vertex, idx + vCoeffsStart)
-
-    val rayCoeffsMapping : HashMap[List[BigInt], Int] = HashMap.empty
-    for ((ray, idx) <- rays.zipWithIndex)
-      rayCoeffsMapping.put(ray, idx + rCoeffsStart)
-
-    val lineCoeffsMapping : HashMap[List[BigInt], Int] = HashMap.empty
-    for ((line, idx) <- lines.zipWithIndex)
-      lineCoeffsMapping.put(line, idx + lCoeffsStart)
-
-    return (Isl.simplify(validChernikovaCoeffs),
-      Generators2CoeffIndices(
-        vertices,
-        rays,
-        lines,
-        vCoeffsStart,
-        rCoeffsStart,
-        lCoeffsStart,
-        nVCoeffs,
-        nRCoeffs,
-        nLCoeffs))
-  }
-
-  case class Generators2CoeffIndices(
-    verticesOrder : List[List[BigInt]],
-    raysOrder : List[List[BigInt]],
-    linesOrder : List[List[BigInt]],
-    verticesStart : Int,
-    raysStart : Int,
-    linesStart : Int,
-    nVertices : Int,
-    nRays : Int,
-    nLines : Int)
-
   /**
     * Takes a schedule represented by an Isl union map. Calculates the set of
     * dependences that is newly carried by each dimension of the schedule.
     */
-  def calcDependencesPartition(s : isl.UnionMap,
+  def calcDependencesPartition(
+    s : isl.UnionMap,
     deps : Set[Dependence]) : List[Set[Dependence]] = {
     val schedNumDims : Int = s.getSpace.dim(T_OUT)
     var dimScheds : List[isl.UnionMap] = Isl.splitMultiDimUnionMap(s)

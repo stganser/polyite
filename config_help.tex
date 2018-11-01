@@ -1,185 +1,397 @@
 \documentclass{article}
 
+\usepackage{fullpage}
+\usepackage[utf8]{inputenc}
+\usepackage{csquotes}
+\usepackage{hyperref}
 
 \begin{document}
+\title{Documentation of Polyite's Configuration Parameters}
+\maketitle
+Polyite reads its configuration from a file. The file contains pairs of the form
+\texttt{key = value}, one pair per line. In the following, we document the available configuration options.
 
 \section{General}
 \begin{description}
-\item[logToFile] Specifies, whether to log to a file (true/ false)
-\item[logFile] log file. \textsc{Polyite} versions the log files.
-\item[islComputeout] Maximum number of computation steps, that some expensive
-ISL operations may take. Set to 0 to disable. An operation is canceled, if the
-limit is exceeded (e.g. the generating of a schedule is discontinued.).
-\item[barvinokBinary] binary that permits access to \textsc{libbarvinok}.
-\item[barvinokLibraryPath] Barvinok library path
-\item[paramValMappings] Value mappings for context parameters (n=42,m=43)
+  \item[logToFile] Specifies, whether to log to a file (true/ false)
+  \item[logFile] log file. \textsc{Polyite} versions the log files.
+  \item[islComputeout] Maximum number of computation steps, that some expensive
+    ISL operations may take. Set to 0 to disable. An operation is canceled, if
+    the limit is exceeded (e.g. the generating of a schedule is discontinued.).
+  \item[barvinokBinary] binary that permits access to \textsc{libbarvinok}.
+  \item[barvinokLibraryPath] Barvinok library path
+  \item[paramValMappings] Value mappings for context parameters (n=42,m=43)
+  \item[scheduleEquivalenceRelation] Two schedules can be see as equal according
+    to different criteria. Polyite uses the following that are reasonably fast
+    to determine in a search based optimization:
+    \begin{itemize}
+      \item RATIONAL\_MATRIX\_AND\_GENERATORS: From the sampling of the schedules
+        results a schedule coefficient matrix with rational coefficients. With
+        this option two schedules will be considered equivalent, if they have
+        the same rational coefficient matrix.
+      \item INT\_MATRIX: A schedule coefficient matrix with rational
+        coefficients will be transformed into a coefficient matrix with integer
+        coefficients before turning it into a schedule tree. With this option
+        two schedules will  be seen considered, if they have the same integer
+        coefficient matrix.
+      \item SCHED\_TREE: With this option two schedules will be considered
+        equivalent if they correspond to the same simplified schedule tree.
+    \end{itemize}
 \end{description}
 
 \section{SCoP}
 
 \begin{description}
-  \item[benchmarkName] Name of the benchmark. Gets passed to the benchmarking script.
-  \item[functionName] Name of the kernel function. Gets passed to the benchmarking script.
-  \item[scopRegionStart, scopRegionEnd] Together form the name of the \texttt{LLVM} IR
-    code region to be optimized. Gets passed to the benchmarking script.
-  \item[irFilesLocation] Tells the benchmarking script where to find the source code (or \texttt{LLVM} IR).
-  \item[seed] Random seed for \textsc{Polyite} (Not reasonable, if $\texttt{numScheduleGenThreads} > 1$). May be either an integer or NONE.
+  \item[benchmarkName] Name of the benchmark. Gets passed to the benchmarking
+    script.
+  \item[functionName] Name of the kernel function. Gets passed to the
+    benchmarking script.
+  \item[scopRegionStart, scopRegionEnd] Together form the name of the
+    \texttt{LLVM} IR code region to be optimized. Gets passed to the
+    benchmarking script.
+  \item[irFilesLocation] Tells the benchmarking script where to find the source
+    code (could be C code or \texttt{LLVM} IR, depending on how one uses LLVM).
+  \item[seed] Random seed for \textsc{Polyite} (Not reasonable, if
+    $\texttt{numScheduleGenThreads} > 1$). May be either an integer or NONE.
 \end{description}
 
 \section{Sampling}
 
 \begin{description}
-    \item[numScheds] total number of schedules to sample.
-    \item[numScheduleGenThreads] The number of threads that generate schedules in parallel.
-    \item[rayCoeffsRange] a value $b$ with $[1, b]$ being the value range for ray coefficients
-        in schedule coefficient vector sampling.
-    \item[lineCoeffsRange] a value $b$ with $[-b, b] \setminus {0}$ being the value range for line coefficients
-        in schedule coefficient vector sampling.
-    \item[maxNumRays] Maximum number of rays in the linear combination that forms one schedule coefficient vector
-      must be one of
-      \begin{itemize}
+  \item[numScheds] total number of schedules to sample.
+  \item[numScheduleGenThreads] The number of threads that generate schedules in
+    parallel.
+  \item[samplingStrategy] Strategy to sample schedules from search space
+    regions. The value must be one of
+  \begin{itemize}
+    \item CHERNIKOVA: Sampling technique that is based on the decomposition
+      theorem for polyhedra and Chernikova's Algorithm
+    \item PROJECTION: Sampling technique that is based on Fourier-Motzkin
+      elimination. Projection Sampling is more efficient than Chernikova
+      Sampling, but preserves no information regarding the search space region
+      from which a schedule matrix has been sampled.
+    \item GEOMETRIC\_DIVIDE\_AND\_CONQUER: Given a search space region,
+      geometric divide and conquer sampling can sample uniformly schedule
+      matrices from that region. The algorithm has originally been described by
+      Igor Pak (\enquote{On Sampling Integer Points in Polyhedra},
+      \textit{Foundations of Computational Mathematics}, 2002) and has been
+      optimized by Danner (\enquote{A performance prediction function based on
+      the exploration of a schedule search space in the polyhedron model.},
+      Master's thesis, 2017). Due to its many invocations of Chernikova's
+      algorithm, the sampling strategy is inefficient.
+  \end{itemize}
+  \item[probabilityToCarryDep] During sampling of search space regions, the
+    probability that all schedule coefficient vectors in a dimension polyhedron
+    $P_d$ carry at least one dependence.
+  \item[maxNumSchedsAtOnce] Maximum number of schedules to sample from the
+    currently selected search space regions
+  \item[randSchedsTimeout] Timeout in seconds for generating one random
+    schedule.
+  \item[genSchedsMaxAllowedConseqFailures] Sampling of schedules fails after
+    so many consecutive failures to generate another schedule.
+  \item[completeSchedules] If set to true, \textsc{Polyite} makes sure that a
+    schedule explicitly encodes every loop from the generated code.
+  \item[linIndepVectsDoNotFixDims] Tweak to speed up schedule completion
+    (true/ false)
+\end{description}
+
+\subsection{Configuration Parameters for Chernikova Sampling}
+\begin{description}
+  \item[rayCoeffsRange] a value $b$ with $[1, b]$ being the value range for
+    ray coefficients in schedule coefficient vector sampling.
+  \item[lineCoeffsRange] a value $b$ with $[-b, b] \setminus {0}$ being the
+    value range for line coefficients in schedule coefficient vector sampling.
+  \item[maxNumRays] Maximum number of rays in the linear combination that
+    forms one schedule coefficient vector must be one of
+    \begin{itemize}
       \item $n$: use at most $n$ rays
       \item ALL: Use arbitrarily many rays
-      \item RAND: When starting to sample a schedule matrix, randomly choose an
-        upper bound for the number of rays.
-      \end{itemize}
-    \item[maxNumLines] Maximum number of lines in the linear combination that forms one schedule coefficient vector
-      must be one of
-      \begin{itemize}
+      \item RAND: When starting to sample a schedule matrix, randomly choose
+        an upper bound for the number of rays.
+    \end{itemize}
+  \item[maxNumLines] Maximum number of lines in the linear combination that
+    forms one schedule coefficient vector must be one of
+    \begin{itemize}
       \item $n$: use at most $n$ lines
       \item ALL: Use arbitrarily many lines
-      \item RAND: When starting to sample a schedule matrix, randomly choose an
-        upper bound for the number of lines.
-      \end{itemize}
-    \item[probabilityToCarryDep] During sampling of search space regions, the probability
-      that all schedule coefficient vectors in a dimension polyhedron $P_d$ carry at
-      least one dependence.
-    \item[maxNumSchedsAtOnce] Maximum number of schedules to sample from the currently
-    selected search space regions
-    \item[moveVertices] When modeling a search space region, move vertices with
+      \item RAND: When starting to sample a schedule matrix, randomly choose
+        an upper bound for the number of lines.
+    \end{itemize}
+  \item[moveVertices] When modeling a search space region, move vertices with
     rational coordinates to neighboring vertices with integer coordinates that
     are inside the polyhedron.
-    \item[rayPruningThreshold] Threshold to prune rays and lines that coordinates
-    exceeding rayPruningThreshold (rational number (x/y) or NONE)
-    \item[randSchedsTimeout] Timeout in seconds for generating one random schedule.
-    \item[genSchedsMaxAllowedConseqFailures] Sampling of schedules fails after
-    so many consecutive failures to generate another schedule.
-    \item[completeSchedules] If set to true, \textsc{Polyite} makes sure that a schedule
-    explicitly encodes every loop from the generated code.
-    \item[linIndepVectsDoNotFixDims] Tweak to speed up schedule completion (true/ false)
-  \end{description}
+  \item[rayPruningThreshold] Threshold to prune rays and lines that
+    coordinates exceeding rayPruningThreshold (rational number (x/y) or NONE)
+\end{description}
 
-    \section{Schedule Tree Transformation and Simplification}
-    \begin{description}
-      \item[simplifySchedTrees] Enables schedule tree simplification (true/ false)
-      \item[splitLoopBodies] Enables canonical representation of loop fusion (true/ false)
-      \item[insertSetNodes] Insert set nodes where they are known to be legal (ISL is not ready for this.)
+\subsection{Configuration Parameters for Projection Sampling}
+\begin{description}
+  \item[schedCoeffsMin] Minimum value of schedule coefficients.
+  \item[schedCoeffsMax] Maximum value of schedule coefficients.
+  \item[schedCoeffsExpectationValue] The the differences between schedule
+    coefficients and $min \lbrace |\textsf{schedCoeffsMin}|,$
+    $|\textsf{schedCoeffsMax}| \rbrace$ are geometrically distributed. This
+    parameter specifies the distribution's expected value.
+\end{description}
 
-      \item the following options enable the different schedule simplification steps (true/ false)
-      \begin{itemize}
-      \item \textbf{schedTreeSimplRebuildDimScheds}
-      \item \textbf{schedTreeSimplRemoveCommonOffset}
-      \item \textbf{schedTreeSimplDivideCoeffsByGCD}
-      \item \textbf{schedTreeSimplElimSuperfluousSubTrees}
-      \item \textbf{schedTreeSimplElimSuperfluousDimNodes}
+\subsection{Configuration Parameters for Geometric Divide and Conquer Sampling}
+\begin{description}
+  \item[schedCoeffsAbsMax] Maximum absolute value for schedule coefficients.
+\end{description}
+
+\section{Schedule Tree Transformation and Simplification}
+\begin{description}
+  \item[simplifySchedTrees] Enables schedule tree simplification (true/ false)
+  \item[splitLoopBodies] Enables canonical representation of loop fusion (true/
+    false)
+  \item[insertSetNodes] Insert set nodes where they are known to be legal (ISL
+    is not ready for this.)
+
+  \item the following options enable the different schedule simplification
+    steps (true/ false)
+  \begin{itemize}
+  \item \textbf{schedTreeSimplRebuildDimScheds}
+  \item \textbf{schedTreeSimplRemoveCommonOffset}
+  \item \textbf{schedTreeSimplDivideCoeffsByGCD}
+  \item \textbf{schedTreeSimplElimSuperfluousSubTrees}
+  \item \textbf{schedTreeSimplElimSuperfluousDimNodes}
+\end{itemize}
+  \item[numSchedTreeSimplDurationMeasurements] Number of measurements of the
+    duration of schedule tree simplification. (may be NONE)
+\end{description}
+
+\section{Genetic Algorithm}
+\begin{description}
+  \item[probabilityToMutateSchedRow] Actually the share of schedule
+    dimensions that is altered by a mutation. (value between 0 and 1).
+  \item[probabilityToMutateGeneratorCoeff] Actually the share of
+    generator coefficients that are mutated by generator coefficient
+    replacement.
+
+  \item[generatorCoeffMaxDenominator] Maximum denominator of rational
+    generator coefficient that are introduced by generator coefficient
+    replacement.
+  \item[currentGeneration] Index of the generation, from which the
+    genetic algorithm should start. If the value is not zero, the presence of
+    a file \texttt{<populationFilePrefix><index>.json} is expected, from which
+    the schedules of the current generation can be loaded.
+
+  \item[maxGenerationToReach] The index of the maximum generation to
+    reach.
+  \item[regularPopulationSize] Size of a single population.
+  \item[fractionOfSchedules2Keep] Fraction of schedules that survive
+    a generation and can reproduce. Format: (n/d)
+  \item[maxNumNewSchedsFromCrossover] More than one schedule can
+    result from one geometric crossover. This parameter controls the maximum
+    number.
+  \item[optimizeParallelExecTime] Controls whether to optimize
+    sequential or parallel execution time.
+  \item[evolutionTimeout] A timeout in seconds for mutations and
+    crossovers. This is necessary, since many operations on polyhedra have at
+    least exponential execution time in the worst case.
+  \item[shareOfRandSchedsInPopulation] Share of randomly generated
+    schedules in each generation. Set this to a small rational number. Format:
+    (n/d)
+
+  \item[replaceDimsEnabled] Enable mutation by dimension replacement
+    (true/false)
+  \item[replacePrefixEnabled] Enable mutation by schedule prefix
+    replacement (true/false)
+  \item[replaceSuffixEnabled] Enable mutation by schedule suffix
+    replacement (true/false)
+  \item[mutateGeneratorCoeffsEnabled] Enable mutation by generator
+    coefficient replacement (true/false). Must only be used in combination
+    with Chernikova Sampling.
+  \item[geometricCrossoverEnabled] Enable geometric crossover
+    (true/false)
+  \item[rowCrossoverEnabled] Enable row crossover (true/false)
+  \item[initPopulationNumRays] Works like \textbf{maxNumRays} but for
+    the generation of the initial population.
+  \item[initPopulationNumLines] Works like \textbf{maxNumLines} but
+    for the generation of the initial population.
+  \item[useConvexAnnealingFunction] Switch between convex and concave
+    annealing function. Due to a bug, convex is concave (true/false).
+  \item[gaCpuTerminationCriterion] If \textbf{evaluationStrategy} = CPU or
+  \textbf{evaluationStrategy} = CLASSIFIER\_AND\_CPU the genetic algorithm's
+  termination criterion is configurable. The following two options are
+  available:
+  \begin{itemize}
+    \item FIXED\_NUM\_GENERATIONS: The genetic algorithm terminates after
+      the evaluation of generation \textsf{maxGenerationToReach}. The initial
+      generation has index 0.
+    \item CONVERGENCE: This termination criterion is parameterized by the
+      following configuration options:
+      \begin{description}
+        \item[convergenceTerminationCriterionWindowSize] The length of a sliding
+          window that contains the most recent generations. The window's minimum
+          length is 2.
+        \item[convergenceTerminationCriterionThreshold] A value in $[0, 1]$
+          that serves as a threshold for the relative difference in speedup
+          yielded between the best schedules in two subsequent generations.
+      \end{description}
+        The genetic algorithm will terminate, if within the window of the latest
+        generations the improvement in maximum speedup did not exceed the
+        configured threshold for any pair of subsequent generations.
+  \end{itemize}
+  If the schedule evaluation relies on the classifier, the genetic algorithm
+  will terminate if the number of generations exceeds
+  \textsf{maxGenerationToReach} or if the share of profitable schedules in the
+  population exceeds 95\%.
+\end{description}
+
+\subsection{Distributed Genetic Algorithm}
+Polyite's genetic algorithm can run in a single process or distributed across
+multiple processes that communicate using OpenMPI. In single process mode
+thread-level parallelism is available to parallelize schedule generation,
+crossover, mutation, and evaluation. In distributed mode, we have multiple
+processes that each are responsible for a subset of the genetic algorithm's
+population. Frequently, schedules migrate between the subpopulations via
+OpenMPI.
+\begin{description}
+  \item[executionMode] Specifies whether to run in single process mode or in
+    distributed mode. Allowed values are MPI and SINGLE\_PROCESS.
+  \item[migrationStrategy] Sets the migration strategy to be used for the
+    distributed genetic algorithm. Allowed values are NEIGHBOR and NEIGHBORHOOD.
+  \item[migrationRate] The frequency in number of generations at which
+    schedules will be migrated between the processes. Must be a positive
+    integer.
+  \item[migrationVolume] The volume of schedules to be migrated. The relative
+    share of schedules to replace by migration must be specified as a rational
+    number in $(0, 1]$ (Format: (n/d).
+\end{description}
+
+\section{Random exploration with a Search Space Construction Similar to LeTSeE}
+\begin{description}
+  \item[boundSchedCoeffs] Enable or disable the limitation of the
+    schedule coefficients to $\lbrace -1, 0, 1 \rbrace$. (true/false)
+  \item[completeSchedules] Allows to choose whether to append
+    dimensions to the sampled coefficient matrices to encode all loops
+    explicitly, or not. (true/false)
+  \item[depsWeighingMethod] Besides the method to weigh dependence polyhedra by
+    the dependent statements' approximate memory traffic
+    (APPROX\_STMT\_MEM\_TRAFFIC), we allow for the calculation of the
+    statements' exact memory traffic (STMT\_MEM\_TRAFFIC) or an approximation
+    of the volume of data exchanged between the dependent statements' memory
+    accesses (DEP\_CACHE\_FOOT\_PRINT).
+\end{description}
+
+\section{Evaluation}
+\begin{description}
+  \item[evaluateScheds] Enables schedule evaluation.
+  \item[numMeasurementThreads] Number of threads for parallel schedule
+    evaluation.
+  \item[tilingPermitInnerSeq] Tell \textsc{Polyite} that the code optimizer
+    will tile inner fused loops that are represented in the schedule tree by a
+    band node followed by sequence node whose children are leaf nodes. Polly
+    does so since version~5.0.
+    \item[evaluationStrategy] Strategy for the evaluation of schedules'
+    fitness. The value must be one of the following:
+    \begin{itemize}
+      \item CPU: Determine schedules' fitness by generating code and measuring
+      the code's execution time. Also the computation result can be verified and
+      any schedules that yield invalid computation results will be discarded. A
+      schedule that causes the compiler to fail will also be discarded.
+      Schedules that the compiler considers mathematically illegal must not
+      occur and will cause an immediate failure of Polyite.
+      \item CLASSIFIER: The classifier relies on a machine learned surrogate
+      performance model and distinguished likely profitable from likely
+      unprofitable schedules.
+      \item CLASSIFIER\_AND\_CPU: Use the classifier as a guard for
+      benchmarking: Benchmarking will only evaluate schedules that the
+      classifier considers profitable.
     \end{itemize}
-      \item[numSchedTreeSimplDurationMeasurements] Number of measurements of the
-      duration of schedule tree simplification. (may be NONE)
-    \end{description}
+\end{description}
 
-    \section{Genetic Algorithm}
-    \begin{description}
-      \item[\textbf{probabilityToMutateSchedRow}] Actually the share of schedule
-      dimensions that is altered by a mutation. (value between 0 and 1).
-      \item[\textbf{probabilityToMutateGeneratorCoeff}] Actually the share of
-      generator coefficients that are mutated by generator coefficient replacement.
+\subsection{Benchmarking}
+\begin{description}
+  \item[measurementCommand] command to run the measurement script. Must run
+    synchronously and permit communication via STDIN/ STDOUT.
+  \item[numactlConf] \textsc{NUMACTL} config that is passed to the measurement
+    command.
+  \item[evaluationSigIntExitCode] The measurement should terminate with this
+    exit code, when interrupted or terminated from outside.
+  \item[measurementTimeout] Timeout for schedule evaluation in seconds.
+  \item[compilationTimeout] Timeout for compilation in seconds. Should be $<=$
+    measurementTimeout (can be set to NONE)
+  \item[measurementWorkingDir] Working of the measurement command.
+  \item[measurementTmpDirBase] base directory for temporary working directories.
+  \item[measurementTmpDirNamePrefix] Name prefix of the directory that
+    measurement processes can create and use to store temporary data.
+  \item[referenceOutputFile] Reference output to validate the result of
+    transformed programs.
+  \item[numExecutionTimeMeasurements] Number of execution time measurements
+    (the minimal measured time is taken as the fitness of a schedule.)
+  \item[numCompilatonDurationMeasurements] Number of compilation duration
+    measurements.
+  \item[validateOutput] Validate computation results.
+  \item[measureParExecTime] enables parallel execution time measurement (true/
+    false)
+  \item[measureSeqExecTime] enables sequential execution time measurement
+    (true/ false)
+  \item[seqPollyOptFlags] Polly flags for sequential code generation
+  \item[parPollyOptFlags] Polly flags for parallel code generation
+  \item[measureCacheHitRatePar] Measure the cache hit rate (using PAPI) of
+    parallel execution
+  \item[measureCacheHitRateSeq] Measure the cache hit rate (using PAPI) of
+    sequential execution
+  \item[benchmarkingSurrenderTimeout] If \textsc{Polyite} fails to start a
+    benchmarking process, it will retry every 15 minutes but fails after the
+    given timeout (in seconds). May be NONE.
+\end{description}
 
-      \item[\textbf{generatorCoeffMaxDenominator}] Maximum denominator of rational
-      generator coefficient that are introduced by generator coefficient replacement.
-      \item[\textbf{currentGeneration}] Index of the generation, from which the
-      genetic algorithm should start. If the value is not zero, the presence of
-      a file \texttt{<populationFilePrefix><index>.json} is expected, from which
-      the schedules of the current generation can be loaded.
+\subsection{Classification}
+\begin{description}
+  \item[learningSet] A comma separated list of CSV files that have been produced
+    by the \texttt{fitness\_calculator} utility program.
+  \item[normalizeFeatures] Should values of schedule features be normalized to
+    the interval $[0, 1]$? Make sure that the data in the learning sets reflects
+    this choice. (true / false)
+  \item[learningAlgorithm] Choose the machine learning technique to learn the
+  classifier. Possible choices are
+  \begin{itemize}
+    \item CART: Learn a single decision tree from the training data.
+    \item RANDOM\_FOREST: Learn a randomized forest of decision trees. A
+      prediction will be the prediction by the majority of the trees in the
+      forest.
+  \end{itemize}
+  \item[decTreeMinSamplesLeaf] The algorithm that learns a classification tree
+    recursively splits a training set. For each split it determines an optimal
+    splitting criterion. Later, decisions will be made according to these
+    criteria. The recursion stops as soon as the training set's size is smaller
+    than the given positive integer value.
+  \item[pythonVEnvLocation] Polyite relies on scikit-learn
+    \footnote{\url{http://scikit-learn.org/}} for machine learning. scikit-learn
+    runs in an interactive Python 3 session. Optionally, scikit-learn and its
+    dependencies can be installed in a Python 3 virtual environment. This
+    parameter must specify the path to the virtual environments root directory.
+    Polyite will load the virtual environment by itself. Therefore, Polyite
+    must not be started within the virtual environment. May be set to NONE.
+\end{description}
 
-      \item[\textbf{maxGenerationToReach}] The index of the maximum generation to reach.
-      \item[\textbf{regularPopulationSize}] Size of a single population.
-      \item[\textbf{fractionOfSchedules2Keep}] Fraction of schedules that survive
-      a generation and can reproduce. Format: (n/d)
-      \item[\textbf{maxNumNewSchedsFromCrossover}] More than one schedule can
-      result from one geometric crossover. This parameter controls the maximum number.
-      \item[\textbf{optimizeParallelExecTime}] Controls whether to optimize
-      sequential or parallel execution time.
-      \item[\textbf{evolutionTimeout}] A timeout in seconds for mutations and
-      crossovers. This is necessary, since many operations on polyhedra have at
-      least exponential execution time in the worst case.
-      \item[\textbf{shareOfRandSchedsInPopulation}] Share of randomly generated
-      schedules in each generation. Set this to a small rational number. Format: (n/d)
+\subsubsection{Additional Parameters for Random Forest}
 
-      \item[\textbf{replaceDimsEnabled}] Enable mutation by dimension replacement (true/false)
-      \item[\textbf{replacePrefixEnabled}] Enable mutation by schedule prefix replacement (true/false)
-      \item[\textbf{replaceSuffixEnabled}] Enable mutation by schedule suffix replacement (true/false)
-      \item[\textbf{mutateGeneratorCoeffsEnabled}] Enable mutation by generator coefficient replacement (true/false)
-      \item[\textbf{geometricCrossoverEnabled}] Enable geometric crossover (true/false)
-      \item[\textbf{rowCrossoverEnabled}] Enable row crossover (true/false)
-      \item[\textbf{initPopulationNumRays}] Works like \textbf{maxNumRays} but for the generation of the initial population.
-      \item[\textbf{initPopulationNumLines}] Works like \textbf{maxNumLines} but for the generation of the initial population.
-      \item[\textbf{useConvexAnnealingFunction}] Switch between convex and concave annealing function. Due to a bug, convex is concave (true/false).
-    \end{description}
+\begin{description}
+  \item[randForestNTree] The number of trees in the random forest.
+  \item[randForestMaxFeatures] Besides learning each tree from a subset of the
+    training data, it is also possible to consider only a subset of the features
+    for the fitting of each tree. The value must be between 1 and the number of
+    the features.
+\end{description}
 
-    \section{Random exploration with LeTSeE's Search Space Construction}
-    \begin{description}
-      \item[\textbf{boundSchedCoeffs}] Enable or disable the limitation of the
-      schedule coefficients to $\lbrace -1, 0, 1 \rbrace$. (true/false)
-      \item[\textbf{completeSchedules}] Allows to choose whether to append
-      dimensions to the sampled coefficient matrices to encode all loops
-      explicitly, or not. (true/false)
-    \end{description}
+\section{Data Export /Import}
+\begin{description}
+  \item[populationFilePrefix] Name prefix for the population JSON file
+  \item[importScheds] Import schedules from existing JSON file (the name is
+    deduced from populationFilePrefix) (true/ false)
+  \item[filterImportedPopulation] Do not reevaluate imported schedules where
+    the evaluation failed previously.
 
-    \section{Evaluation}
-    \begin{description}
-      \item[evaluateScheds] Enables schedule evaluation.
-      \item[numMeasurementThreads] Number of benchmarking threads. Equals the
-        number of simultaneously queued \textsc{SLURM} jobs.
-      \item[measurementCommand] command to run the measurement script. Must run
-        synchronously and permit communication via STDIN/ STDOUT.
-      \item[numactlConf] \textsc{NUMACTL} config that is passed to the measurement command.
-      \item[evaluationSigIntExitCode] The measurement should terminate with this
-      exit code, when interrupted or terminated from outside.
-      \item[measurementTimeout] Timeout for schedule evaluation in seconds.
-      \item[compilationTimeout] Timeout for compilation in seconds. Should be $<=$ measurementTimeout (can be set to NONE)
-      \item[measurementWorkingDir] Working of the measurement command.
-      \item[measurementTmpDirBase] base directory for temporary working directories.
-      \item[measurementTmpDirNamePrefix] Name prefix of the directory that measurement processes
-      can create and use to store temporary data.
-      \item[referenceOutputFile] Reference output to validate the result of transformed
-        programs.
-      \item[numExecutionTimeMeasurements] Number of execution time measurements (the minimal measured time
-        is taken as the fitness of a schedule.)
-      \item[numCompilatonDurationMeasurements] Number of compilation duration measurements.
-      \item[validateOutput] Validate computation results.
-      \item[tilingPermitInnerSeq] Tell \textsc{Polyite} that hthe code optimizer will tile inner fused loops.
-      \item[measureParExecTime] enables parallel execution time measurement (true/ false)
-      \item[measureSeqExecTime] enables sequential execution time measurement (true/ false)
-      \item[seqPollyOptFlags] Polly flags for sequential code generation
-      \item[parPollyOptFlags] Polly flags for parallel code generation
-      \item[measureCacheHitRatePar] Measure the cache hit rate (using PAPI) of parallel execution
-      \item[measureCacheHitRateSeq] Measure the cache hit rate (using PAPI) of sequential execution
-      \item[benchmarkingSurrenderTimeout] If \textsc{Polyite} fails to start a benchmarking
-      process, it will retry every 15 minutes but fails after the given timeout (in seconds). May be NONE.
-    \end{description}
-
-    \section{Data Export /Import}
-    \begin{description}
-      \item[populationFilePrefix] Name prefix for the population JSON file
-      \item[importScheds] Import schedules from existing JSON file (the name is
-      deduced from populationFilePrefix) (true/ false)
-      \item[filterImportedPopulation] Do not reevaluate imported schedules where
-      the evaluation failed previously.
-
-      \item[exportSchedulesToJSCOPFiles] Export each schedule to a separate extended JSCOP file. (true/ false)
-      \item[jscopFolderPrefix] Name prefix for the folders containing the JSCOP files. The name of files is generate
-      from the imported JSCOP file's name.
-      \item[exportPopulationToCSV] Export generated schedules and evaluation results to CSV
-      \item[csvFilePrefix] Path prefix for the CSV files.
-    \end{description}
+  \item[exportSchedulesToJSCOPFiles] Export each schedule to a separate
+    extended JSCOP file. (true/ false)
+  \item[jscopFolderPrefix] Name prefix for the folders containing the JSCOP
+    files. The name of files is generate from the imported JSCOP file's name.
+  \item[exportPopulationToCSV] Export generated schedules and evaluation
+    results to CSV
+  \item[csvFilePrefix] Path prefix for the CSV files.
+\end{description}
 \end{document}

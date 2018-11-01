@@ -10,6 +10,8 @@ import polyite.schedule.Dependence
 import polyite.config.Config
 import polyite.config.MinimalConfig.NumGeneratorsLimit
 import polyite.config.MinimalConfig.NumGeneratorsLimit
+import polyite.schedule.sampling.SamplingStrategy
+import polyite.schedule.hash.ScheduleHash
 
 object MainRandScheds {
 
@@ -17,14 +19,13 @@ object MainRandScheds {
 
   def main(args : Array[String]) : Unit = {
 
-    def buildRandSchedGen(s : ScopInfo) : ((DomainCoeffInfo, Set[Dependence],
-        Int, Set[Schedule], NumGeneratorsLimit, NumGeneratorsLimit, ConfigRand) => Set[Schedule]) = {
+    def buildRandSchedGen(s : ScopInfo) : ((DomainCoeffInfo, Set[Dependence], Int, Set[Schedule], NumGeneratorsLimit, NumGeneratorsLimit, ConfigRand, SamplingStrategy, Schedule => ScheduleHash) => Set[Schedule]) = {
       ScheduleUtils.genRandSchedules
     }
 
     try {
-    MainUtil.runRandExpl[ConfigRand](args, ConfigRand.loadAndValidateConfig,
-      buildRandSchedGen)
+      MainUtil.runRandExpl[ConfigRand](args, ConfigRand.loadAndValidateConfig,
+        buildRandSchedGen)
     } catch {
       case t : Throwable => {
         val logger : Logger = Logger.getLogger("")

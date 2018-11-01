@@ -4,6 +4,8 @@ import java.io.File
 import java.util.Properties
 import java.util.logging.Logger
 import polyite.util.Rat
+import polyite.config.MinimalConfig.EvaluationStrategy
+import polyite.fitness.scikit_learn.Classifier
 
 object ConfigRand {
   val myLogger : Logger = Logger.getLogger("")
@@ -99,7 +101,19 @@ object ConfigRand {
       basicConf.barvinokBinary,
       basicConf.barvinokLibraryPath,
       basicConf.normalizeFeatures,
-      basicConf.gpu,
+      basicConf.evaluationStrategy,
+      basicConf.learningSet,
+      basicConf.decTreeMinSamplesLeaf,
+      basicConf.learningAlgorithm,
+      basicConf.randForestNTree,
+      basicConf.randForestMaxFeatures,
+      basicConf.pythonVEnvLocation,
+      basicConf.samplingStrategy,
+      basicConf.schedCoeffsMin,
+      basicConf.schedCoeffsMax,
+      basicConf.schedCoeffsExpectationValue,
+      basicConf.scheduleEquivalenceRelation,
+      basicConf.schedCoeffsAbsMax,
 
       numScheds.get,
       importScheds.get,
@@ -169,7 +183,19 @@ class ConfigRand(
   barvinokBinary : File,
   barvinokLibraryPath : File,
   normalizeFeatures : Boolean,
-  gpu : Boolean,
+  evaluationStrategy : EvaluationStrategy.Value,
+  learningSet : Option[List[File]],
+  decTreeMinSamplesLeaf : Option[Int],
+  learningAlgorithm : Option[Classifier.LearningAlgorithms.Value],
+  randForestNTree : Option[Int],
+  randForestMaxFeatures : Option[Int],
+  pythonVEnvLocation : Option[File],
+  samplingStrategy : MinimalConfig.SamplingStrategy.Value,
+  schedCoeffsMin : Option[Int],
+  schedCoeffsMax : Option[Int],
+  schedCoeffsExpectationValue : Option[Double],
+  scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
+  schedCoeffsAbsMax : Option[Int],
 
   val numScheds : Int,
   val importScheds : Boolean,
@@ -235,8 +261,19 @@ class ConfigRand(
   barvinokBinary,
   barvinokLibraryPath,
   normalizeFeatures,
-  gpu) {
-
+  evaluationStrategy,
+  learningSet,
+  decTreeMinSamplesLeaf,
+  learningAlgorithm,
+  randForestNTree,
+  randForestMaxFeatures,
+  pythonVEnvLocation,
+  samplingStrategy,
+  schedCoeffsMin,
+  schedCoeffsMax,
+  schedCoeffsExpectationValue,
+  scheduleEquivalenceRelation,
+  schedCoeffsAbsMax) {
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
     sb.append(super.toString())

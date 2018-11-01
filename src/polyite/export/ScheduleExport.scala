@@ -12,9 +12,12 @@ import scala.collection.mutable.HashMap
 import polyite.ScopInfo
 import polyite.config.Config
 import polyite.config.ConfigRand
+import polyite.config.MinimalConfig.EvaluationStrategy
 import polyite.fitness.Feature
 import polyite.fitness.FeatureVect
 import polyite.sched_eval.EvalResult
+import polyite.sched_eval.EvalResultOnly
+import polyite.sched_eval.Fitness
 import polyite.schedule.Dependence
 import polyite.schedule.DomainCoeffInfo
 import polyite.schedule.Schedule
@@ -34,24 +37,35 @@ object ScheduleExport {
     * {@code conf.populationFilePrefix} and {@code generation}. The exported data
     * can be re-imported using the load-functions.
     */
-  def exportPopulationToFile(conf : Config)(
+  def exportPopulationToFileEvalRes(conf : Config)(
     population : Iterable[(Schedule, EvalResult)],
     generation : Int) {
     val populationFile = buildPopulationFilePath(conf.populationFilePrefix, generation)
-    exportPopulationToFile(populationFile, population, generation)
+    exportPopulationToFileEvalRes(populationFile, population, generation)
   }
 
-  def exportPopulationToFile(populationFile : File, population : Iterable[(Schedule, EvalResult)], generation : Int) {
-    val popWrapped : Iterable[(Schedule, Option[EvalResult], Option[FeatureVect])] = population.map(t => (t._1, Some(t._2), None))
-    exportPopulationToFileFVect(populationFile, popWrapped, generation)
+  def exportPopulationToFileEvalRes(populationFile : File, population : Iterable[(Schedule, EvalResult)], generation : Int) {
+    val popWrapped : Iterable[(Schedule, Fitness)] = population.map(t => (t._1, EvalResultOnly(t._2)))
+    exportPopulationToFile(populationFile, popWrapped, generation)
+  }
+
+  /**
+    * Export the schedules in {@code population} together with their evaluation
+    * results to a JSON file. The name of the file is inferred from
+    * {@code conf.populationFilePrefix} and {@code generation}. The exported data
+    * can be re-imported using the load-functions.
+    */
+  def exportPopulationToFile(conf : Config, makeFileDistinct: String => String = s => s)(population : Iterable[(Schedule, Fitness)], features : List[Feature],
+    generation : Int) {
+    val populationFile = buildPopulationFilePath(makeFileDistinct(conf.populationFilePrefix), generation)
+    exportPopulationToFile(populationFile, population, generation)
   }
 
   /**
     * Export the schedules in {@code population} together with their evaluation results to a JSON file. The exported
     * data can be re-imported using the load-functions.
     */
-  def exportPopulationToFileFVect(populationFile : File,
-    population : Iterable[(Schedule, Option[EvalResult], Option[FeatureVect])], generation : Int) {
+  def exportPopulationToFile(populationFile : File, population : Iterable[(Schedule, Fitness)], generation : Int) {
 
     try {
       JSONLogExporter.writePopulationToFile(populationFile, population, generation)
@@ -76,9 +90,9 @@ object ScheduleExport {
     * is deterministic but cannot be influenced.
     */
   def exportPopulationToJSCOPFiles(conf : Config, scop : ScopInfo,
-    domInfo : DomainCoeffInfo, deps : Set[Dependence], jscopFileNamePrefix : String)(
-      population : Iterable[(Schedule, EvalResult)], generation : Int) {
-    val populationDir : File = new File(conf.jscopFolderPrefix + generation)
+    domInfo : DomainCoeffInfo, deps : Set[Dependence], jscopFileNamePrefix : String, makeFileDistinct : String => String = s => s)(
+      population : Iterable[(Schedule, Fitness)], features : List[Feature], generation : Int) {
+    val populationDir : File = new File(makeFileDistinct(conf.jscopFolderPrefix) + generation)
     exportPopulationToJSCOPFiles(conf, scop, domInfo, deps, jscopFileNamePrefix,
       population, populationDir)
   }
@@ -91,7 +105,7 @@ object ScheduleExport {
     */
   def exportPopulationToJSCOPFiles(conf : Config, scop : ScopInfo,
     domInfo : DomainCoeffInfo, deps : Set[Dependence],
-    jscopFileNamePrefix : String, population : Iterable[(Schedule, EvalResult)],
+    jscopFileNamePrefix : String, population : Iterable[(Schedule, Fitness)],
     populationDir : File) {
     populationDir.mkdirs()
     if (!Util.checkFileExistsAndHasRequiredPermissions(true, true, true, true,
@@ -105,7 +119,7 @@ object ScheduleExport {
       contents.map { f => f.delete() }
     }
     var schedIdx : Int = 0
-    sortSchedules(population).map((t : (Schedule, EvalResult)) => {
+    sortSchedules(population).map((t : (Schedule, Fitness)) => {
       val s : Schedule = t._1
       val schedMap : isl.UnionMap = s.getSchedule
       val schedTree : isl.Schedule = ScheduleTreeConstruction
@@ -126,41 +140,43 @@ object ScheduleExport {
   }
 
   private def sortSchedules(
-    population : Iterable[(Schedule, EvalResult)]) : List[(Schedule, EvalResult)] =
+    population : Iterable[(Schedule, Fitness)]) : List[(Schedule, Fitness)] =
     population.toList.sortBy(t => t._1.getSchedule.toString())
 
-  private def sortSchedulesFVect(
-    population : Iterable[(Schedule, Option[EvalResult], Option[FeatureVect])]) : List[(Schedule, Option[EvalResult], Option[FeatureVect])] =
-    population.toList.sortBy(t => t._1.getSchedule.toString())
-
-  private def sortSchedulesFVectUnionMap(
-    population : Iterable[(isl.UnionMap, Option[EvalResult], Option[FeatureVect])]) : List[(isl.UnionMap, Option[EvalResult], Option[FeatureVect])] =
+  private def sortSchedulesUnionMap(
+    population : Iterable[(isl.UnionMap, Fitness)]) : List[(isl.UnionMap, Fitness)] =
     population.toList.sortBy(t => t._1.toString())
 
   /**
     * Exports the given schedules together with their evaluation results to a
     * CSV-file. The name of the CSV.file is {@code conf.csvFilePrefix + generation + ".csv"}.
     */
-  def exportPopulationToCSV(conf : Config)(
-    population : Iterable[(Schedule, EvalResult)], generation : Int) {
-    val populationWrapped : List[(Schedule, Option[EvalResult], Option[FeatureVect])] = population.toList.map(t => (t._1, Some(t._2), None))
-    exportPopulationToCSVFVect(conf)(populationWrapped, true, List.empty, generation)
+  def exportPopulationToCSVEvalRes(conf : Config)(population : Iterable[(Schedule, EvalResult)], generation : Int) {
+    val populationWrapped : List[(Schedule, Fitness)] = population.toList.map(t => (t._1, EvalResultOnly(t._2)))
+    exportPopulationToCSV(conf, populationWrapped, true, false, List.empty, generation)
+  }
+
+  def exportPopulationToCSV(conf : Config, makeFileDistinct: String => String = s => s)(population : Iterable[(Schedule, Fitness)], features : List[Feature],
+    generation : Int) {
+    val popSchedMaps : Iterable[(isl.UnionMap, Fitness)] = population.map(t => (t._1.getSchedule, t._2))
+    exportPopulationToCSVUnionMap(conf, makeFileDistinct)(popSchedMaps,
+      conf.evaluationStrategy == EvaluationStrategy.CPU || conf.evaluationStrategy == EvaluationStrategy.GPU,
+      conf.evaluationStrategy == EvaluationStrategy.CLASSIFIER, features, generation)
   }
 
   /**
     * Exports the given schedules together with their evaluation results to a
     * CSV-file. The name of the CSV.file is {@code conf.csvFilePrefix + generation + ".csv"}.
     */
-  def exportPopulationToCSVFVect(conf : Config)(population : Iterable[(Schedule, Option[EvalResult], Option[FeatureVect])],
-    exportEvalRes : Boolean, features : List[Feature], generation : Int) {
-    val popSchedMaps : Iterable[(isl.UnionMap, Option[EvalResult], Option[FeatureVect])] = population.map(t => (t._1.getSchedule, t._2, t._3))
-    exportPopulationToCSVFVectUnionMap(conf)(popSchedMaps, exportEvalRes, features, generation)
+  def exportPopulationToCSV(conf : Config, population : Iterable[(Schedule, Fitness)], exportEvalRes : Boolean,
+    exportPerfClass : Boolean, features : List[Feature], generation : Int) {
+    val popSchedMaps : Iterable[(isl.UnionMap, Fitness)] = population.map(t => (t._1.getSchedule, t._2))
+    exportPopulationToCSVUnionMap(conf)(popSchedMaps, exportEvalRes, exportPerfClass, features, generation)
   }
 
-  def exportPopulationToCSVVectUnionMap(csvFile : File, numCompilatonDurationMeasurements : Int,
-      numSchedTreeSimplDurationMeasurements : Int, numExecutionTimeMeasurements : Int,
-    population : Iterable[(isl.UnionMap, Option[EvalResult], Option[FeatureVect])],
-    exportEvalRes : Boolean, features : List[Feature], generation : Int) = {
+  def exportPopulationToCSVUnionMap(csvFile : File, numCompilatonDurationMeasurements : Int,
+    numSchedTreeSimplDurationMeasurements : Int, numExecutionTimeMeasurements : Int,
+    population : Iterable[(isl.UnionMap, Fitness)], exportEvalRes : Boolean, exportPerfClass : Boolean, features : List[Feature], generation : Int) = {
     try {
       if (!csvFile.createNewFile()) {
         myLogger.warning("File " + csvFile + " already existed. Overwritting "
@@ -216,7 +232,10 @@ object ScheduleExport {
         writer.write(featuresSorted.mkString("\t", "\t", ""))
       }
 
-      sortSchedulesFVectUnionMap(population).foldLeft(0)((idx : Int, t) => {
+      if (exportPerfClass)
+        writer.write("\tclass")
+
+      sortSchedulesUnionMap(population).foldLeft(0)((idx : Int, t) => {
 
         val defaultVal : String = "-"
 
@@ -240,13 +259,7 @@ object ScheduleExport {
         append('\"' + s.toString() + '\"')
 
         if (exportEvalRes) {
-          if (!t._2.isDefined) {
-            val msg : String = "The evaluation result of " + s + " is undefined."
-            myLogger.warning(msg)
-            throw new StorageException(msg)
-          }
-
-          val res : EvalResult = t._2.get
+          val res : EvalResult = t._2.getEvalResult.getOrElse(EvalResult.notEvaluated)
           append(res.completelyEvaluated.toString)
 
           if (exportSchedTreeSimplDurations)
@@ -279,13 +292,20 @@ object ScheduleExport {
 
         if (!features.isEmpty) {
           val featuresSorted : List[Feature] = features.sorted
-          if (!t._3.isDefined) {
-            val msg : String = "The feature vector of " + s + " is undefined."
-            myLogger.warning(msg)
-            throw new StorageException(msg)
-          }
-          val fVect : FeatureVect = t._3.get
+          val fVect : FeatureVect = if (t._2.getPrediction.isDefined)
+            t._2.getPrediction.get.fVect
+          else
+            new FeatureVect(Map.empty)
           featuresSorted.map(fVect.getFeature(_)).foreach(appendOptional)
+        }
+
+        if (exportPerfClass) {
+          val fit : Fitness = t._2
+          writer.write("\t")
+          if (fit.getPrediction.isDefined && fit.getPrediction.get.pClass.isDefined)
+            writer.write(fit.getPrediction.get.pClass.get.toString())
+          else
+            writer.write("-")
         }
 
         idx + 1
@@ -313,20 +333,21 @@ object ScheduleExport {
     * Exports the given schedules together with their evaluation results to a
     * CSV-file. The name of the CSV.file is {@code conf.csvFilePrefix + generation + ".csv"}.
     */
-  def exportPopulationToCSVFVectUnionMap(conf : Config)(population : Iterable[(isl.UnionMap, Option[EvalResult], Option[FeatureVect])],
-    exportEvalRes : Boolean, features : List[Feature], generation : Int) {
-    val csvFile : File = new File(conf.csvFilePrefix + generation + ".csv")
+  def exportPopulationToCSVUnionMap(conf : Config, makeFileDistinct: String => String = s => s)(population : Iterable[(isl.UnionMap, Fitness)],
+    exportEvalRes : Boolean, exportPerfClass : Boolean, features : List[Feature], generation : Int) {
+    val csvFile : File = new File(makeFileDistinct(conf.csvFilePrefix) + generation + ".csv")
     val numSchedTreeSimplDurationMeasurements : Int = if (conf.isInstanceOf[ConfigRand]) {
       val confRand : ConfigRand = conf.asInstanceOf[ConfigRand]
       confRand.numSchedTreeSimplDurationMeasurements.getOrElse(0)
     } else
       0
-    exportPopulationToCSVVectUnionMap(csvFile,
+    exportPopulationToCSVUnionMap(csvFile,
       conf.numCompilatonDurationMeasurements,
       numSchedTreeSimplDurationMeasurements,
       conf.numExecutionTimeMeasurements,
       population,
       exportEvalRes,
+      exportPerfClass,
       features,
       generation)
   }
@@ -338,39 +359,52 @@ object ScheduleExport {
     * exported information.
     */
   def loadPopulationFromFile(conf : Config, domInfo : DomainCoeffInfo,
-    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, EvalResult]] = {
+    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, Fitness]] = {
     val populationFile : File = buildPopulationFilePath(
       conf.populationFilePrefix, generation)
     return loadPopulationFromFile(populationFile, domInfo, deps, generation)
   }
 
+  /**
+    * Loads a population of schedules and evaluation results from file. The name
+    * of the file is inferred from {@code conf.populationFilePrefix} and
+    * {@code generation}. The loaded schedule instances contain all previously
+    * exported information.
+    */
+  def loadPopulationFromFileNoFilter(conf : Config, domInfo : DomainCoeffInfo,
+    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, Fitness]] = {
+    val populationFile : File = buildPopulationFilePath(
+      conf.populationFilePrefix, generation)
+    return loadPopulationFromFileNoFilter(populationFile, domInfo, deps, generation).map(_._1)
+  }
+
   def loadPopulationFromFile(populationFile : File, domInfo : DomainCoeffInfo,
-    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, EvalResult]] = {
-    val populationRaw : HashMap[Schedule, (Option[EvalResult], Option[FeatureVect])] = loadPopulationFromFileFVect(
+    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, Fitness]] = {
+    val populationRaw : HashMap[Schedule, Fitness] = loadPopulationFromFileNoFilter(
       populationFile, domInfo, deps, generation) match {
         case None    => return None
         case Some(p) => p._1
       }
-    val filtered : HashMap[Schedule, EvalResult] = populationRaw.map(t => {
-      val evalResMaybe : Option[EvalResult] = t._2._1
-      if (!evalResMaybe.isDefined) {
+    val filtered : HashMap[Schedule, Fitness] = populationRaw.map(t => {
+      val fit : Fitness = t._2
+      if (!fit.getEvalResult.isDefined) {
         myLogger.warning("schedule has no evaluation result: " + t._1)
         return None
       }
-      (t._1, evalResMaybe.get)
+      (t._1, fit)
     })
     return Some(filtered)
   }
 
-  def loadPopulationFromFileFVect(populationFile : File, domInfo : DomainCoeffInfo,
-    deps : Set[Dependence], generation : Int) : Option[(HashMap[Schedule, (Option[EvalResult], Option[FeatureVect])], Int)] = {
+  def loadPopulationFromFileNoFilter(populationFile : File, domInfo : DomainCoeffInfo,
+    deps : Set[Dependence], generation : Int) : Option[(HashMap[Schedule, Fitness], Int)] = {
     if (!Util.checkFileExistsAndHasRequiredPermissions(true, false, false,
       false, populationFile)) {
       myLogger.warning("File " + populationFile + " cannot be accessed.")
       return None
     }
 
-    val (population : HashMap[Schedule, (Option[EvalResult], Option[FeatureVect])], importedGeneration : Int) = JSONLogExporter
+    val (population : HashMap[Schedule, Fitness], importedGeneration : Int) = JSONLogExporter
       .readPopulationFromFile(populationFile, domInfo, deps)
     if (importedGeneration != generation) {
       myLogger.warning("The given generation (" + generation
@@ -388,7 +422,7 @@ object ScheduleExport {
     * working directory.
     */
   def loadPopulationFromFile(parentDir : String, conf : Config, domInfo : DomainCoeffInfo,
-    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, EvalResult]] = {
+    deps : Set[Dependence], generation : Int) : Option[HashMap[Schedule, Fitness]] = {
     val populationFile : File = buildPopulationFilePath(parentDir,
       conf.populationFilePrefix, generation)
     return loadPopulationFromFile(populationFile, domInfo, deps, generation)
@@ -401,7 +435,7 @@ object ScheduleExport {
     * evaluation results are loaded.
     */
   def loadPopulationFromFileLight(conf : Config,
-    generation : Int) : Option[HashMap[String, EvalResult]] = {
+    generation : Int) : Option[HashMap[String, Fitness]] = {
     val populationFile : File = buildPopulationFilePath(
       conf.populationFilePrefix, generation)
     return loadPopulationFromFileLight(populationFile, generation)
@@ -413,28 +447,22 @@ object ScheduleExport {
     * working directory.
     */
   def loadPopulationFromFileLight(parentDir : String, conf : Config,
-    generation : Int) : Option[HashMap[String, EvalResult]] = {
+    generation : Int) : Option[HashMap[String, Fitness]] = {
     val populationFile : File = buildPopulationFilePath(parentDir,
       conf.populationFilePrefix, generation)
     return loadPopulationFromFileLight(populationFile, generation)
   }
 
-  def loadPopulationFromFileLight(f : File, generation : Int) : Option[HashMap[String, EvalResult]] = {
-    val populationRaw : HashMap[String, (Option[EvalResult], Option[FeatureVect])] = loadPopulationFromFileLightFVect(f, generation) match {
+  def loadPopulationFromFileLight(f : File, generation : Int) : Option[HashMap[String, Fitness]] = {
+    val populationRaw : HashMap[String, Fitness] = loadPopulationFromFileNoFilter(f, generation) match {
       case None    => return None
       case Some(p) => p._1
     }
-    val filtered : HashMap[String, EvalResult] = populationRaw.map(t => {
-      if (!t._2._1.isDefined) {
-        myLogger.warning("schedule has no evaluation result: " + t._1)
-        return None
-      }
-      (t._1, t._2._1.get)
-    })
+    val filtered : HashMap[String, Fitness] = populationRaw.filter((p : (String, Fitness)) => p._2.getEvalResult.isDefined)
     return Some(filtered)
   }
 
-  def loadPopulationFromFileLightFVect(f : File, generation : Int) : Option[(HashMap[String, (Option[EvalResult], Option[FeatureVect])], Int)] = {
+  def loadPopulationFromFileNoFilter(f : File, generation : Int) : Option[(HashMap[String, Fitness], Int)] = {
 
     if (!Util.checkFileExistsAndHasRequiredPermissions(true, false, false,
       false, f)) {
@@ -442,7 +470,7 @@ object ScheduleExport {
       return None
     }
 
-    val (population : HashMap[String, (Option[EvalResult], Option[FeatureVect])],
+    val (population : HashMap[String, Fitness],
       importedGeneration : Int) = JSONLogExporter.readPopulationFromFileLight(f)
     if (importedGeneration != generation) {
       myLogger.warning("The given generation (" + generation

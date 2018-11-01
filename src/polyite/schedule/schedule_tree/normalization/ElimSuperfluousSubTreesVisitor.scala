@@ -52,7 +52,8 @@ class ElimSuperfluousSubTreesVisitor extends ScheduleNodeVisitor[ScheduleNode] {
 
   // returns the (reduced) band and a flag carrying the information whether the current path of the schedule tree is
   // an injective schedule.
-  def handleBand(nodePrefix : List[isl.UnionMap], band : List[(isl.UnionMap, Boolean)], domain : isl.UnionSet) : (List[(isl.UnionMap, Boolean)], Boolean) = {
+  def handleBand(nodePrefix : List[isl.UnionMap], band : List[(isl.UnionMap, Boolean)],
+      domain : isl.UnionSet) : (List[(isl.UnionMap, Boolean)], Boolean) = {
     var schedPrefixList : List[isl.UnionMap] = nodePrefix
 
     if (!schedPrefixList.isEmpty) {

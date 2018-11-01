@@ -2,6 +2,7 @@ package polyite.schedule.schedule_tree
 
 import isl.Conversions.convertLambdaToVoidCallback1
 import isl.Isl.TypeAliases.T_IN
+import isl.Isl
 
 trait ScheduleNode {
   protected var father : ScheduleNode = null
@@ -15,7 +16,7 @@ trait ScheduleNode {
   def getDomain : isl.UnionSet = domain
   def getCoeffMatrDims : List[Int] = coeffMatrDims
 
-  /* 
+  /*
      * schedule for given statements from root until this node. Fails if stmts is not a subset of the
      * domain of this node.
      */
@@ -60,7 +61,6 @@ class SeqNode private () extends ScheduleNode {
       var equal = this.isRoot == oSeqNode.isRoot
       equal &&= this.domain.isEqual(oSeqNode.domain)
       equal &&= this.children.size == oSeqNode.children.size
-      equal &&= this.coeffMatrDims == oSeqNode.coeffMatrDims
       return equal && this.children.zip(oSeqNode.children).forall(t => t._1.equals(t._2))
     }
     return false
@@ -68,16 +68,15 @@ class SeqNode private () extends ScheduleNode {
 
   override def hashCode() : Int = {
     val prime : Int = 13
-    var hash : Int = this.domain.toString().hashCode()
+    var hash : Int = Isl.islUnionSetUniqueToString(this.domain).hashCode()
     hash = hash * prime + this.children.hashCode()
-    hash = hash * prime + this.coeffMatrDims.hashCode()
     return hash
   }
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
     val childStrs : Iterable[String] = children.map(t => {
-      StringBuilder.newBuilder.append("Filter").append(t._1.mkString("(", ",", ")")).append(";").append(t._2).toString()
+      StringBuilder.newBuilder.append("Filter").append(t._1.toList.sorted.mkString("(", ",", ")")).append(";").append(t._2).toString()
     })
     sb.append("SeqNode").append(childStrs.mkString("(", ",", ")"))
     return sb.toString()
@@ -125,7 +124,6 @@ class SetNode private () extends ScheduleNode {
       var equal = this.isRoot == oSetNode.isRoot
       equal &&= this.domain.isEqual(oSetNode.domain)
       equal &&= this.children.size == oSetNode.children.size
-      equal &&= this.coeffMatrDims.equals(oSetNode.coeffMatrDims)
       if (equal) {
         val myChildrenSorted : List[(Set[String], ScheduleNode)] = this.children.toList.sorted
         val otherChildrenSorted : List[(Set[String], ScheduleNode)] = oSetNode.children.toList.sorted
@@ -137,16 +135,15 @@ class SetNode private () extends ScheduleNode {
 
   override def hashCode() : Int = {
     val prime : Int = 13
-    var hash : Int = this.domain.toString().hashCode()
+    var hash : Int = Isl.islUnionSetUniqueToString(this.domain).hashCode()
     hash = hash * prime + this.children.hashCode()
-    hash = hash * prime + this.coeffMatrDims.hashCode()
     return hash
   }
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
-    val childStrs : Iterable[String] = children.map(t => {
-      StringBuilder.newBuilder.append("Filter").append(t._1.mkString("(", ",", ")")).append(";").append(t._2).toString()
+    val childStrs : Iterable[String] = children.toList.sortBy(_._1.toList.sorted.toString).map(t => {
+      StringBuilder.newBuilder.append("Filter").append(t._1.toList.sorted.mkString("(", ",", ")")).append(";").append(t._2).toString()
     })
     sb.append("SetNode").append(childStrs.mkString("(", ",", ")"))
     return sb.toString()
@@ -198,7 +195,6 @@ class DimNode private () extends ScheduleNode {
       equal &&= this.domain.isEqual(oDimNode.domain)
       equal &&= this.sched.isEqual(oDimNode.sched)
       equal &&= this.child.equals(oDimNode.child)
-      equal &&= this.coeffMatrDims.equals(oDimNode.coeffMatrDims)
       return equal
     }
     return false
@@ -206,17 +202,16 @@ class DimNode private () extends ScheduleNode {
 
   override def hashCode() : Int = {
     val prime : Int = 13
-    var hash : Int = this.domain.toString().hashCode
-    hash = hash * prime + this.sched.toString().hashCode()
+    var hash : Int = Isl.islUnionSetUniqueToString(this.domain).hashCode
+    hash = hash * prime + Isl.islUnionMapUniqueToString(this.sched).hashCode()
     hash = hash * prime + this.child.hashCode
-    hash = hash * prime + this.coeffMatrDims.hashCode()
     return hash
   }
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
     sb.append("DimNode(")
-      .append(sched)
+      .append(Isl.islUnionMapUniqueToString(this.sched))
       .append(");")
       .append(child)
     return sb.toString
@@ -248,16 +243,14 @@ class LeafNode private () extends ScheduleNode {
   override def equals(o : Any) : Boolean = {
     if (o.isInstanceOf[LeafNode]) {
       val oLeafNode : LeafNode = o.asInstanceOf[LeafNode]
-      val equal = coeffMatrDims.equals(oLeafNode.coeffMatrDims)
-      return equal && this.domain.isEqual(oLeafNode.domain)
+      return this.domain.isEqual(oLeafNode.domain)
     }
     return false
   }
 
   override def hashCode() : Int = {
     val prime : Int = 13
-    var hash : Int = domain.toString().hashCode()
-    hash = hash * prime + coeffMatrDims.hashCode()
+    var hash : Int = Isl.islUnionSetUniqueToString(domain).hashCode()
     return hash
   }
 
@@ -303,7 +296,6 @@ abstract class BandNode private () extends ScheduleNode {
       if (this.scheds.size == oBandNode.scheds.size) {
         var equal : Boolean = this.domain.isEqual(oBandNode.domain)
         equal &&= this.scheds.zip(oBandNode.scheds).forall(t => t._1._1.isEqual(t._2._1) && (t._1._2 == t._2._2))
-        equal &&= this.coeffMatrDims.equals(oBandNode.coeffMatrDims)
         return equal && this.child.equals(oBandNode.child)
       }
     }
@@ -312,16 +304,15 @@ abstract class BandNode private () extends ScheduleNode {
 
   override def hashCode() : Int = {
     val prime : Int = 13
-    var hash : Int = this.domain.toString().hashCode()
-    hash = hash * prime + this.coeffMatrDims.hashCode()
-    hash = hash * prime + this.scheds.map(t => (t._1.toString(), t._2)).hashCode()
+    var hash : Int = Isl.islUnionSetUniqueToString(this.domain).hashCode()
+    hash = hash * prime + this.scheds.map(t => (Isl.islUnionMapUniqueToString(t._1), t._2)).hashCode()
     return hash
   }
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
     val thisStr : String = scheds.map(t => {
-      "(" + t._1 + ", coincident: " + t._2 + ")"
+      "(" + Isl.islUnionMapUniqueToString(t._1) + ", coincident: " + t._2 + ")"
     }).mkString("[", ";", "]")
     sb.append("BandNode")
       .append(thisStr)
@@ -332,7 +323,7 @@ abstract class BandNode private () extends ScheduleNode {
 }
 
 class SimpleBandNode(domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)],
-    child : ScheduleNode, coeffMatrDims : List[Int]) extends BandNode(domain, scheds, child, coeffMatrDims) {
+  child : ScheduleNode, coeffMatrDims : List[Int]) extends BandNode(domain, scheds, child, coeffMatrDims) {
 
   def accept[T](v : ScheduleNodeVisitor[T]) : T = v.visit(this)
 
@@ -340,7 +331,7 @@ class SimpleBandNode(domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean
 }
 
 class BandNodeLoop private (domain : isl.UnionSet, scheds : List[(isl.UnionMap, Boolean)], child : ScheduleNode, coeffMatrDims : List[Int])
-    extends BandNode(domain, scheds, child, coeffMatrDims) {
+  extends BandNode(domain, scheds, child, coeffMatrDims) {
   // additional info
   private var loop : List[Map[String, Boolean]] = null
 
@@ -390,7 +381,7 @@ class BandNodeLoop private (domain : isl.UnionSet, scheds : List[(isl.UnionMap, 
       val sched : isl.UnionMap = t._1._1
       val coincident : Boolean = t._1._2
       val loopInfo : Map[String, Boolean] = t._2
-      "(" + sched + ", coincident: " + coincident + ", loopInfo: " + loopInfo + ")"
+      "(" + Isl.islUnionMapUniqueToString(sched) + ", coincident: " + coincident + ", loopInfo: " + loopInfo + ")"
     }).mkString("[, ", ";", "]")
     sb.append("BandNodeLoop")
       .append(thisStr)

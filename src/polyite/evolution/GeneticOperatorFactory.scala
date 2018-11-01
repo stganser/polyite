@@ -3,6 +3,8 @@ package polyite.evolution
 import polyite.config.ConfigGA
 import polyite.schedule.Schedule
 import scala.collection.mutable.HashSet
+import polyite.ScopInfo
+import polyite.schedule.sampling.SamplingStrategy
 
 /**
   * Factory for genetic operators.
@@ -28,13 +30,13 @@ object GeneticOperatorFactory {
     }
   }
 
-  private val mutationStrategies : Map[GeneticOperators.Value, (ConfigGA, Int) => (Schedule => Option[Schedule])] = Map(
+  private val mutationStrategies : Map[GeneticOperators.Value, (ConfigGA, ScopInfo, Int, SamplingStrategy) => (Schedule => Option[Schedule])] = Map(
     (GeneticOperators.ReplaceDims, MutationStrategies.replaceDims),
     (GeneticOperators.ReplacePrefix, MutationStrategies.replacePrefix),
     (GeneticOperators.ReplaceSuffix, MutationStrategies.replaceSuffix),
     (GeneticOperators.MutateGeneratorCoeffs, MutationStrategies.mutateGeneratorCoeffs))
 
-  private val crossoverStrategies : Map[GeneticOperators.Value, ConfigGA => ((Schedule, Schedule) => HashSet[Schedule])] = Map(
+  private val crossoverStrategies : Map[GeneticOperators.Value, (ConfigGA, ScopInfo, SamplingStrategy) => ((Schedule, Schedule) => HashSet[Schedule])] = Map(
     (GeneticOperators.GeometricCrossover, CrossoverStrategies.geometricCrossover),
     (GeneticOperators.RowCrossover, CrossoverStrategies.rowCrossover))
 
@@ -42,14 +44,14 @@ object GeneticOperatorFactory {
     * Produces a mutator for the requested operation and the given configuration. Simulated annealing is adjusted for
     * the given generation.
     */
-  def createMutator(op : GeneticOperators.Value, conf : ConfigGA, generation : Int) : (Schedule => Option[Schedule]) = {
-    return mutationStrategies(op)(conf, generation)
+  def createMutator(op : GeneticOperators.Value, conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy) : (Schedule => Option[Schedule]) = {
+    return mutationStrategies(op)(conf, scop, generation, sampler)
   }
 
   /**
     * Produces a crossover function for the requested operation and the given configuration.
     */
-  def createCrossover(op : GeneticOperators.Value, conf : ConfigGA) : (Schedule, Schedule) => HashSet[Schedule] = {
-    return crossoverStrategies(op)(conf)
+  def createCrossover(op : GeneticOperators.Value, conf : ConfigGA, scop : ScopInfo, sampler : SamplingStrategy) : (Schedule, Schedule) => HashSet[Schedule] = {
+    return crossoverStrategies(op)(conf, scop, sampler)
   }
 }

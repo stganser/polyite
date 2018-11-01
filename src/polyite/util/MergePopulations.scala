@@ -14,9 +14,14 @@ import java.util.logging.Logger
 import polyite.fitness.FeatureVect
 import polyite.export.ScheduleExport
 import polyite.export.JSONLogExporter
+import polyite.sched_eval.Fitness
+import polyite.fitness.Prediction
+import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.HashSet
+import polyite.sched_eval.EvalResultOnly
 
 /**
-  * Loads a list of population files and merges the first population with the rest.
+  * Loads a list of population files and merges the first population with the rest. Drops predictions and feature vectors.
   */
 object MergePopulations {
 
@@ -37,57 +42,46 @@ object MergePopulations {
     val outputJSONFile : File = new File(args(1))
     val outputCSVFile : File = new File(args(2))
 
-    val numSchedTreeSimplDurationMeasurements : Int = args(3).toInt
-    val numCompilatonDurationMeasurements : Int = args(4).toInt
-    val numExecutionTimeMeasurements : Int = args(5).toInt
+    val numCompilatonDurationMeasurements : Int = args(3).toInt
+    val numExecutionTimeMeasurements : Int = args(4).toInt
 
-    val populationFiles : List[File] = args.drop(6).toList.map(new File(_))
+    val populationFiles : List[File] = args.drop(5).toList.map(new File(_))
 
-    val populations : List[HashMap[Schedule, EvalResult]] = populationFiles.map((f : File) => {
+    val populations : List[HashMap[Schedule, Fitness]] = populationFiles.map((f : File) => {
       myLogger.info("Loading schedules from " + f)
-      val (scheds2Results : HashMap[Schedule, EvalResult], generation2 : Int) = load(f, domInfo, deps) match {
-        case None    => return
-        case Some(p) => p
-      }
+      val (scheds2Results : HashMap[Schedule, Fitness], generation2 : Int) = load(f, domInfo, deps)
       scheds2Results
     })
 
     myLogger.info("Merging populations.")
 
-    val result : HashMap[Schedule, EvalResult] = HashMap.empty
+    val scheds2EvalResults : HashMap[Schedule, EvalResult] = HashMap.empty
 
-    for (scheds2Results : HashMap[Schedule, EvalResult] <- populations)
-      for ((s : Schedule, res : EvalResult) <- scheds2Results)
-        result.put(s, res)
-
-    myLogger.info("The merged set contains " + result.size + " schedules.")
+    for (scheds2Results : HashMap[Schedule, Fitness] <- populations)
+      for ((s : Schedule, fit : Fitness) <- scheds2Results)
+        if (fit.getEvalResult.isDefined)
+          scheds2EvalResults.put(s, fit.getEvalResult.get)
+    myLogger.info("The merged set contains " + scheds2EvalResults.size + " schedules.")
     myLogger.info("JSON export.")
-    ScheduleExport.exportPopulationToFile(outputJSONFile, result, 0)
+    ScheduleExport.exportPopulationToFile(outputJSONFile, scheds2EvalResults.map(t => (t._1, EvalResultOnly(t._2))), 0)
     myLogger.info("CSV export")
-    ScheduleExport.exportPopulationToCSVVectUnionMap(outputCSVFile,
+    ScheduleExport.exportPopulationToCSVUnionMap(outputCSVFile,
       numCompilatonDurationMeasurements,
-      numSchedTreeSimplDurationMeasurements,
+      0,
       numExecutionTimeMeasurements,
-      result.map(t => (t._1.getSchedule, Some(t._2), Option.empty[FeatureVect])), true, List.empty, 0)
+      scheds2EvalResults.map(t => (t._1.getSchedule, EvalResultOnly(t._2))), true, false, List.empty, 0)
   }
 
   myLogger.info("Storing the merged population")
 
-  private def load(f : File, domInfo : DomainCoeffInfo, deps : Set[Dependence]) : Option[(HashMap[Schedule, EvalResult], Int)] = {
-    val (populationRaw : HashMap[Schedule, (Option[EvalResult], Option[FeatureVect])], generation : Int) = JSONLogExporter.readPopulationFromFile(f, domInfo, deps)
-    val filtered : HashMap[Schedule, EvalResult] = populationRaw.map(t => {
-      if (!t._2._1.isDefined) {
-        myLogger.warning("schedule has no evaluation result: " + t._1)
-        return None
-      }
-      (t._1, t._2._1.get)
-    })
-    return Some((filtered, generation))
+  private def load(f : File, domInfo : DomainCoeffInfo, deps : Set[Dependence]) : (HashMap[Schedule, Fitness], Int) = {
+    val (populationRaw : HashMap[Schedule, Fitness], generation : Int) = JSONLogExporter.readPopulationFromFile(f, domInfo, deps)
+    return (populationRaw, generation)
   }
 
   def checkNumArgs(args : Array[String]) : Boolean = {
-    if (args.length < 7) {
-      myLogger.warning("Expected at least seven arguments: <JSCOP file> <output JSON file> <output CSV file> <# schedule tree simplification measurements> <# compile duration measurements> <# execution time measurements> <population file>+")
+    if (args.length < 6) {
+      myLogger.warning("Expected at least six arguments: <JSCOP file> <output JSON file> <output CSV file> <# compile duration measurements> <# execution time measurements> <population files>")
       return false
     }
     return true

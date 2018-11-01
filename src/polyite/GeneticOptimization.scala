@@ -12,16 +12,28 @@ import scala.math.BigInt.int2bigInt
 import scala.util.Random
 
 import polyite.config.ConfigGA
+import polyite.config.MinimalConfig
 import polyite.evolution.GeneticOperatorFactory
 import polyite.evolution.GeneticOperatorFactory.GeneticOperators
-import polyite.sched_eval.EvalResult
-import polyite.sched_eval.ScheduleEvaluation
+import polyite.fitness.Feature
+import polyite.sched_eval.AbstractFitnessEvaluation
+import polyite.sched_eval.Fitness
+import polyite.sched_eval.FitnessUnknown
 import polyite.schedule.Dependence
 import polyite.schedule.DomainCoeffInfo
+import polyite.schedule.sampling.SamplingStrategy
 import polyite.schedule.Schedule
 import polyite.schedule.ScheduleUtils
 import polyite.util.Rat
+import polyite.util.Timer
 import polyite.util.Util
+import polyite.pmpi._
+import polyite.schedule.hash.ScheduleHash
+import polyite.export.ExportStrategy
+import polyite.evolution.SelectionStrategy
+import polyite.config.ConfigGA.MigrationStrategy
+import polyite.evolution.migration.MigrationStrategy
+import polyite.evolution.GATerminationCriterion
 
 /**
   * Implements a genetic algorithm for schedule optimization in the polyhedral
@@ -45,68 +57,88 @@ object GeneticOptimization {
     * schedules together with the evaluation results and a Bool that is true iff
     * the overall evaluation was successful.
     * @param population schedules to start from.
-    * @param storageSinks list of function that can be used to store each
+    * @param storageSinks list of strategies that can be used to store each
     * generation for evaluation after it has been evaluated. In case of a problem
-    * this function stores the current generation of schedules before returning.
+    * these strategies store the current generation of schedules before returning.
     * @param isImportedPopulation tells this function whether {@code population}
     * contains schedules that have been imported from file of if {@code population}
     * is a randomly generated set of schedules.
     * @param schedSelectionStrategy function to select the schedules that form
     * the basis for the next generation of schedules.
-    *
+    * @param classifyForEvaluation function that classifies schedules into schedules that need evaluation and schedules
+    * that have already been evaluated depending on their evaluation results.
+    * @param migrationStrategy strategy for the migration of schedules between the processes of the distributed genetic
+    * algorithm. {@code conf} determines whether the distributed or the sequential genetic algorithm will run. In case
+    * of the sequential genetic algorithm, this parameter may be {@code None}.
+    * @param conf configuration properties
     * @see polyite.evolution.SelectionStrategies
     */
-  def optimize(evaluateSchedules : HashSet[Schedule] => (HashMap[Schedule, EvalResult], Boolean),
-    population : HashMap[Schedule, EvalResult], conf : ConfigGA, scop : ScopInfo,
-    storageSinks : Iterable[(Iterable[(Schedule, EvalResult)], Int) => Unit],
+  def optimize(schedEvaluator : AbstractFitnessEvaluation, population : HashMap[Schedule, Fitness], conf : ConfigGA,
+    scop : ScopInfo, storageSinks : Iterable[ExportStrategy],
     isImportedPopulation : Boolean, domInfo : DomainCoeffInfo, deps : Set[Dependence],
-    schedSelectionStrategy : (Int, HashMap[Schedule, EvalResult], Int) => Array[(Schedule, EvalResult)]) {
+    schedSelectionStrategy : SelectionStrategy,
+    migrationStrategy : Option[MigrationStrategy],
+    terminationCriterion : GATerminationCriterion, sampler : SamplingStrategy, mpi : IMPI, hashScheds : Schedule => ScheduleHash) {
     var currentGeneration : Int = conf.currentGeneration
-    var currentPopulation : HashMap[Schedule, EvalResult] = HashMap.empty
+    var currentPopulation : HashMap[Schedule, Fitness] = HashMap.empty
     population.map(t =>
       {
-        if (!isImportedPopulation || (!conf.filterImportedPopulation || t._2.completelyEvaluated))
+        if (!isImportedPopulation || (!conf.filterImportedPopulation || t._2.isCompletelyEvaluated))
           currentPopulation.put(t._1, t._2)
       })
 
-    while (currentGeneration <= conf.maxGenerationToReach) {
+    var terminate : Boolean = terminationCriterion.decide(currentGeneration, currentPopulation)
+
+    while (!terminate) {
       myLogger.info("The current population contains " + currentPopulation.size
         + " schedules.")
       myLogger.info("Evaluating generation " + currentGeneration)
-      val (alreadyEvaluated : HashMap[Schedule, EvalResult],
-        scheds2Eval : HashSet[Schedule]) = ScheduleEvaluation
-        .classifyForEvaluation(currentPopulation)
+      val (alreadyEvaluated : HashMap[Schedule, Fitness],
+        scheds2Eval : HashSet[Schedule]) = schedEvaluator.classifyForEvaluation(currentPopulation).getOrElse({
+        myLogger.warning("Failed to select the schedules that require fitness evaluation. Terminating.")
+        return
+      })
       myLogger.info(scheds2Eval.size + " schedules must be evaluated.")
       if (!scheds2Eval.isEmpty) {
-        val (evaluatedScheds : HashMap[Schedule, EvalResult],
-          evaluationSuccessful : Boolean) = evaluateSchedules(scheds2Eval)
+        val (evaluatedScheds : HashMap[Schedule, Fitness],
+          evaluationSuccessful : Boolean) = schedEvaluator.evaluateSchedules(scheds2Eval)
         currentPopulation = alreadyEvaluated ++ evaluatedScheds
         if (!evaluationSuccessful) {
           myLogger.warning("Evaluation failed.")
         }
         myLogger.info("Writing the current population to file.")
+        Timer.stopTimer("")
         try {
-          storageSinks.map(_(currentPopulation, currentGeneration))
+          val features = if (conf.evaluationStrategy == MinimalConfig.EvaluationStrategy.CLASSIFIER)
+            Feature.features
+          else
+            List.empty
+          storageSinks.map(_.export(currentPopulation, features, currentGeneration))
         } catch {
           case e : IOException => {
             myLogger.info("Failed to store the current population. Terminating.")
+            mpi.abortAllAndTerminate("Failed to store the current population.")
             return
           }
         }
+        Timer.restartTimer("")
         if (!evaluationSuccessful) {
           myLogger.warning("Terminating.")
+          mpi.abortAllAndTerminate("Schedule evaluation failed.")
           return
         }
       }
-      if (currentGeneration < conf.maxGenerationToReach) {
-        val successfullyMeasured : HashMap[Schedule, EvalResult] = HashMap.empty
+      terminate = terminationCriterion.decide(currentGeneration + 1, currentPopulation)
+      if (!terminate) {
+        val successfullyMeasured : HashMap[Schedule, Fitness] = HashMap.empty
         for ((sched, res) <- currentPopulation) {
-          if (res.completelyEvaluated)
+          if (res.isCompletelyEvaluated)
             successfullyMeasured.put(sched, res)
         }
         if (successfullyMeasured.isEmpty) {
           myLogger.warning("None of the schedules could be benchmarked"
             + "successfully. Terminating.")
+          mpi.abortAllAndTerminate("Benchmarking has failed.")
           return
         }
         myLogger.info("Selecting the best schedules.")
@@ -117,7 +149,7 @@ object GeneticOptimization {
           } else {
             (conf.fractionOfSchedules2Keep * Rat(currentPopulation.size)).intCeil.toInt
           }
-        val nextGenerationBasis : Array[(Schedule, EvalResult)] = schedSelectionStrategy(
+        val nextGenerationBasis : Array[(Schedule, Fitness)] = schedSelectionStrategy.select(
           currentGeneration + 1, successfullyMeasured, maxNumScheds2Keep)
         myLogger.info("The basis for the next generation contains "
           + nextGenerationBasis.size + " schedules.")
@@ -125,8 +157,8 @@ object GeneticOptimization {
           myLogger.warning("The basis for the next generation will contain less "
             + "schedules than planned: " + nextGenerationBasis.size
             + " instead of " + maxNumScheds2Keep)
-        currentPopulation = completePopulation(nextGenerationBasis,
-          currentGeneration + 1, conf, domInfo, deps)
+        currentPopulation = completePopulation(nextGenerationBasis, currentGeneration + 1, conf, scop, domInfo, deps,
+          schedEvaluator.selectForMutation, migrationStrategy, sampler, hashScheds)
         val popSize : Int = currentPopulation.size
         if (popSize < conf.regularPopulationSize)
           myLogger.warning("The population size could not be increased up to "
@@ -134,28 +166,61 @@ object GeneticOptimization {
 
         if (popSize == nextGenerationBasis.size) {
           myLogger.warning("Failed to produce new schedules. Terminating.")
+          mpi.abortAllAndTerminate("Failed to produce an offspring population.")
           return
         }
       }
       currentGeneration += 1
     }
-    if (currentGeneration > conf.maxGenerationToReach) {
-      println("Reached the configured maximum generation. Stopping the optimization.")
-    }
+
+    myLogger.info("Time for migration exchange in seconds: " + migrTime / 1000)
   }
 
-  private def completePopulation(basis : Array[(Schedule, EvalResult)],
-    currentGeneration : Int, conf : ConfigGA, domInfo : DomainCoeffInfo,
-    deps : Set[Dependence]) : HashMap[Schedule, EvalResult] = {
-    val timeout = conf.evolutionTimeout * 1000
-    val fullPopulation : HashMap[Schedule, EvalResult] = HashMap.empty
-    basis.map(t => fullPopulation.put(t._1, t._2))
+  private var migrTime : Long = 0
 
-    val numRandScheds = math.min((Rat(conf.regularPopulationSize)
-      * conf.shareOfRandSchedsInPopulation).intFloor.toInt,
+  private def completePopulation(basis : Array[(Schedule, Fitness)], currentGeneration : Int, conf : ConfigGA, scop : ScopInfo,
+    domInfo : DomainCoeffInfo, deps : Set[Dependence],
+    selectionStrategy : Array[(Schedule, Fitness)] => Schedule,
+    migrationStrategy : Option[MigrationStrategy],
+    sampler : SamplingStrategy, hashScheds : Schedule => ScheduleHash) : HashMap[Schedule, Fitness] = {
+    val timeout = conf.evolutionTimeout * 1000
+    val fullPopulation : HashMap[ScheduleHash, (Schedule, Fitness)] = HashMap.empty
+    basis.map(t => fullPopulation.put(hashScheds(t._1), (t._1, t._2)))
+
+    val numRandScheds = math.min(
+      (Rat(conf.regularPopulationSize)
+        * conf.shareOfRandSchedsInPopulation).intFloor.toInt,
       conf.regularPopulationSize - fullPopulation.size)
-    ScheduleUtils.genRandSchedules(domInfo, deps, numRandScheds, conf.maxNumRays, conf.maxNumLines, conf)
-      .map(fullPopulation.put(_, EvalResult.notEvaluated))
+    ScheduleUtils.genRandSchedules(domInfo, deps, numRandScheds, conf.maxNumRays, conf.maxNumLines, conf, sampler, hashScheds)
+      .map((s : Schedule) => {
+        val h : ScheduleHash = hashScheds(s)
+        if (!fullPopulation.contains(h))
+          fullPopulation.put(h, (s, FitnessUnknown))
+      })
+
+    /*
+     * Migration of schedules by the distributed genetic algorithm.
+     */
+    if (conf.executionMode == ConfigGA.ExecutionMode.MPI && (conf.migrationRate.get == 0 || currentGeneration % conf.migrationRate.get == 0)) {
+      val timeStart = System.currentTimeMillis()
+      val migrated : List[(Schedule, Fitness)] = migrationStrategy.get.migrate(basis, domInfo, deps, currentGeneration)
+      for ((sched : Schedule, fit : Fitness) <- migrated) {
+        if (!fit.isCompletelyEvaluated) {
+          myLogger.warning("Invaild fitness/schedule made it into full population.")
+          val originalPopulation : HashMap[Schedule, Fitness] = HashMap.empty
+          basis.foreach((t : (Schedule, Fitness)) => originalPopulation.put(t._1, t._2))
+          return originalPopulation
+        }
+
+        val h : ScheduleHash = hashScheds(sched)
+        if (!fullPopulation.contains(h)) {
+          fullPopulation.put(h, (sched, fit))
+          myLogger.info(f"inserted migrated schedule into the population: (${sched}, ${fit})")
+        }
+      }
+      val timeTaken = (System.currentTimeMillis() - timeStart)
+      migrTime += timeTaken
+    }
 
     def genScheds(idx : Int)(x : Unit) {
       val logPrefix : String = "(mutation worker #" + idx + ") "
@@ -177,16 +242,17 @@ object GeneticOptimization {
           val crossoverOp : GeneticOperators.Value = conf.activeCrossovers(Random.nextInt(conf.activeCrossovers.size))
           myLogger.info(logPrefix + "Applying " + crossoverOp)
           val crossoverFunc : ((Schedule, Schedule) => HashSet[Schedule]) = GeneticOperatorFactory
-            .createCrossover(crossoverOp, conf)
-          val newScheds : HashSet[Schedule] = applyCrossover(crossoverFunc, basis, timeout, logPrefix)
+            .createCrossover(crossoverOp, conf, scop, sampler)
+          val newScheds : HashSet[Schedule] = applyCrossover(crossoverFunc, selectionStrategy, basis, timeout, logPrefix)
           val newSchedsIter : Iterator[Schedule] = newScheds.iterator
 
           fullPopulation.synchronized {
             while (newSchedsIter.hasNext && fullPopulation.size < conf.regularPopulationSize) {
               val s : Schedule = newSchedsIter.next()
-              if (!fullPopulation.contains(s)) {
-                ScheduleUtils.assertValid(s)
-                fullPopulation.put(s, EvalResult.notEvaluated)
+              ScheduleUtils.assertValid(s)
+              val h : ScheduleHash = hashScheds(s)
+              if (!fullPopulation.contains(h)) {
+                fullPopulation.put(h, (s, FitnessUnknown))
                 myLogger.info(logPrefix + "new schedule " + s)
                 addedAny = true
               }
@@ -197,16 +263,18 @@ object GeneticOptimization {
         } else if (!conf.activeMutators.isEmpty) {
           val mutationOp : GeneticOperators.Value = conf.activeMutators(Random.nextInt(conf.activeMutators.size))
           myLogger.info(logPrefix + "Applying " + mutationOp)
-          val mutationFunc : Schedule => Option[Schedule] = GeneticOperatorFactory.createMutator(mutationOp, conf,
-            currentGeneration)
-          val newSched = applyMutation(mutationFunc, basis, timeout, logPrefix)
+          val mutationFunc : Schedule => Option[Schedule] = GeneticOperatorFactory.createMutator(mutationOp, conf, scop,
+            currentGeneration, sampler)
+          val newSched = applyMutation(mutationFunc, selectionStrategy, basis, timeout, logPrefix)
           fullPopulation.synchronized {
-            if (newSched.isDefined && fullPopulation.size < conf.regularPopulationSize
-              && !fullPopulation.contains(newSched.get)) {
+            if (newSched.isDefined && fullPopulation.size < conf.regularPopulationSize) {
               ScheduleUtils.assertValid(newSched.get)
-              fullPopulation.put(newSched.get, EvalResult.notEvaluated)
-              myLogger.info(logPrefix + "new schedule " + newSched.get)
-              addedAny = true
+              val h : ScheduleHash = hashScheds(newSched.get)
+              if (!fullPopulation.contains(h)) {
+                fullPopulation.put(h, (newSched.get, FitnessUnknown))
+                myLogger.info(logPrefix + "new schedule " + newSched.get)
+                addedAny = true
+              }
             }
           }
         }
@@ -227,11 +295,11 @@ object GeneticOptimization {
       schedGenWorkers(i) = genScheds(i)
     schedGenWorkers.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(conf.numScheduleGenThreads))
     schedGenWorkers.map(f => f(()))
-    return fullPopulation
+    return fullPopulation.map(t => (t._2._1, t._2._2))
   }
 
-  private def applyCrossover(f : (Schedule, Schedule) => HashSet[Schedule],
-    basis : Array[(Schedule, EvalResult)], timeout : Long, logPrefix : String) : HashSet[Schedule] = {
+  private def applyCrossover(f : (Schedule, Schedule) => HashSet[Schedule], selectionStrategy : Array[(Schedule, Fitness)] => Schedule,
+    basis : Array[(Schedule, Fitness)], timeout : Long, logPrefix : String) : HashSet[Schedule] = {
     var sched1 : Schedule = null
     var sched2 : Schedule = null
     do {
@@ -239,8 +307,8 @@ object GeneticOptimization {
         sched1 = basis(0)._1
         sched2 = basis(1)._1
       } else {
-        sched1 = basis(Random.nextInt(basis.size))._1
-        sched2 = basis(Random.nextInt(basis.size))._1
+        sched1 = selectionStrategy(basis)
+        sched2 = selectionStrategy(basis)
       }
     } while (sched1 == sched2)
     myLogger.info(logPrefix + "Crossover of " + sched1 + " and " + sched2)
@@ -256,9 +324,9 @@ object GeneticOptimization {
     }
   }
 
-  private def applyMutation(f : Schedule => Option[Schedule],
-    basis : Array[(Schedule, EvalResult)], timeout : Long, logPrefix : String) : Option[Schedule] = {
-    val oldSched : Schedule = basis(Random.nextInt(basis.size))._1
+  private def applyMutation(f : Schedule => Option[Schedule], selectionStrategy : Array[(Schedule, Fitness)] => Schedule,
+    basis : Array[(Schedule, Fitness)], timeout : Long, logPrefix : String) : Option[Schedule] = {
+    val oldSched : Schedule = selectionStrategy(basis)
     myLogger.info(logPrefix + "Mutation of " + oldSched)
     val newSchedMaybe : Option[Option[Schedule]] =
       Util.runWithTimeout(oldSched, f, timeout)

@@ -10,6 +10,14 @@ import polyite.schedule.Schedule
 import polyite.sched_eval.EvalResult
 import polyite.schedule.ScheduleUtils
 import java.io.File
+import polyite.sched_eval.Fitness
+import polyite.sched_eval.EvalResultOnly
+import polyite.sched_eval.PredictionAndEvalResult
+import polyite.fitness.Prediction
+import polyite.fitness.FeatureVect
+import polyite.fitness.ParallelLoops
+import polyite.schedule.sampling.ChernikovaSamplingStrategy
+import polyite.schedule.hash.SameGenerators
 
 class JSONLogExporterTest extends AbstractScopTest {
 
@@ -60,10 +68,11 @@ class JSONLogExporterTest extends AbstractScopTest {
       case None    => return
       case Some(c) => c
     }
-    val population : HashMap[Schedule, EvalResult] = HashMap.empty
-    val defaultEvalResult : EvalResult = EvalResult.create(true, Some(List(5, 6, 7, 8)), true, Some(List(1.3, 1.4)), None, Some(false), Some(true),
-      None, Some(false), Some(true), Some(List(1, 2, 3, 4)), None, Some(List(5, 6, 7, 8, 98)), Some(false), Some(4.5), None, Some(8.9), false)
-    ScheduleUtils.genRandSchedules(domInfo, deps, 5, conf.maxNumRays, conf.maxNumLines, conf).map { s =>
+    val population : HashMap[Schedule, Fitness] = HashMap.empty
+    val defaultEvalResult : Fitness = PredictionAndEvalResult(Prediction(new FeatureVect(Map((ParallelLoops, 1))),
+      Some(Prediction.PerfClass.GOOD)), EvalResult.create(true, Some(List(5, 6, 7, 8)), true, Some(List(1.3, 1.4)), None, Some(false), Some(true),
+      None, Some(false), Some(true), Some(List(1, 2, 3, 4)), None, Some(List(5, 6, 7, 8, 98)), Some(false), Some(4.5), None, Some(8.9), false))
+    ScheduleUtils.genRandSchedules(domInfo, deps, 5, conf.maxNumRays, conf.maxNumLines, conf, ChernikovaSamplingStrategy, SameGenerators.apply).map { s =>
       {
         population.put(s, defaultEvalResult)
       }
@@ -73,7 +82,7 @@ class JSONLogExporterTest extends AbstractScopTest {
     f.deleteOnExit()
     val gen : Int = 42
     ScheduleExport.exportPopulationToFile(f, population, gen)
-    val (loadedPopulation : HashMap[Schedule, EvalResult]) = ScheduleExport.loadPopulationFromFile(f, domInfo, deps, gen) match {
+    val (loadedPopulation : HashMap[Schedule, Fitness]) = ScheduleExport.loadPopulationFromFile(f, domInfo, deps, gen) match {
       case None    => throw new AssertionError("faield to import the population")
       case Some(p) => p
     }

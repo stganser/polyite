@@ -69,6 +69,10 @@ class AbstractTest {
     props.setProperty("schedTreeSimplDivideCoeffsByGCD", "true")
     props.setProperty("schedTreeSimplElimSuperfluousSubTrees", "true")
     props.setProperty("schedTreeSimplElimSuperfluousDimNodes", "true")
+    props.setProperty("normalizeFeatures", "false")
+    props.setProperty("evaluationStrategy", "CPU")
+    props.setProperty("samplingStrategy", "CHERNIKOVA")
+    props.setProperty("scheduleEquivalenceRelation", "RATIONAL_MATRIX_AND_GENERATORS")
     return Config.parseConfig(props)
   }
 }

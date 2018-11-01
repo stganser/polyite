@@ -4,10 +4,16 @@ import java.io.File
 import java.util.Properties
 import java.util.logging.Logger
 
+import polyite.config.MinimalConfig.EvaluationStrategy
+import polyite.fitness.scikit_learn.Classifier
 import polyite.util.Rat
 
 object ConfigRandLeTSeEStyle {
   val myLogger : Logger = Logger.getLogger("")
+
+  object DepsWeighingMethod extends Enumeration {
+    val DEP_CACHE_FOOT_PRINT, STMT_MEM_TRAFFIC, APPROX_STMT_MEM_TRAFFIC = Value
+  }
 
   def loadAndValidateConfig(f : File) : Option[ConfigRandLeTSeEStyle] = {
     return parseConfig(MinimalConfig.loadProperties(f))
@@ -28,10 +34,18 @@ object ConfigRandLeTSeEStyle {
     if (!completeSchedules.isDefined)
       return None
 
-    propName = "weighDepsByStmtTraffic"
-    val weighDepsByStmtTraffic : Option[Boolean] = MinimalConfig.getBooleanProperty(propName, rawConf)
-    if (!weighDepsByStmtTraffic.isDefined)
+    propName = "depsWeighingMethod"
+    val depsWeighingMethodStr : Option[String] = MinimalConfig.getProperty(propName, rawConf)
+    if (!depsWeighingMethodStr.isDefined)
       return None
+    val depsWeighingMethod : DepsWeighingMethod.Value = try {
+      DepsWeighingMethod.withName(depsWeighingMethodStr.get)
+    } catch {
+      case (e : NoSuchElementException) => {
+        myLogger.warning(f"The method for weighing of dependence polyhedra '${depsWeighingMethodStr.get}' is unknown.")
+        return None
+      }
+    }
 
     return Some(new ConfigRandLeTSeEStyle(
       basicConf.numMeasurementThreads,
@@ -94,7 +108,19 @@ object ConfigRandLeTSeEStyle {
       basicConf.barvinokBinary,
       basicConf.barvinokLibraryPath,
       basicConf.normalizeFeatures,
-      basicConf.gpu,
+      basicConf.evaluationStrategy,
+      basicConf.learningSet,
+      basicConf.decTreeMinSamplesLeaf,
+      basicConf.learningAlgorithm,
+      basicConf.randForestNTree,
+      basicConf.randForestMaxFeatures,
+      basicConf.pythonVEnvLocation,
+      MinimalConfig.SamplingStrategy.CHERNIKOVA,
+      None,
+      None,
+      None,
+      basicConf.scheduleEquivalenceRelation,
+      None,
 
       basicConf.numScheds,
       basicConf.importScheds,
@@ -103,7 +129,7 @@ object ConfigRandLeTSeEStyle {
 
       boundSchedCoeffs.get,
       completeSchedules.get,
-      weighDepsByStmtTraffic.get))
+      depsWeighingMethod))
   }
 }
 
@@ -168,7 +194,19 @@ class ConfigRandLeTSeEStyle(
   barvinokBinary : File,
   barvinokLibraryPath : File,
   normalizeFeatures : Boolean,
-  gpu : Boolean,
+  evaluationStrategy : EvaluationStrategy.Value,
+  learningSet : Option[List[File]],
+  decTreeMinSamplesLeaf : Option[Int],
+  learningAlgorithm : Option[Classifier.LearningAlgorithms.Value],
+  randForestNTree : Option[Int],
+  randForestMaxFeatures : Option[Int],
+  pythonVEnvLocation : Option[File],
+  samplingStrategy : MinimalConfig.SamplingStrategy.Value,
+  schedCoeffsMin : Option[Int],
+  schedCoeffsMax : Option[Int],
+  schedCoeffsExpectationValue : Option[Double],
+  scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
+  schedCoeffsAbsMax : Option[Int],
 
   numScheds : Int,
   importScheds : Boolean,
@@ -177,7 +215,7 @@ class ConfigRandLeTSeEStyle(
 
   val boundSchedCoeffs : Boolean,
   val completeSchedules : Boolean,
-  val weighDepsByStmtTraffic : Boolean) extends ConfigRand(
+  val depsWeighingMethod : ConfigRandLeTSeEStyle.DepsWeighingMethod.Value) extends ConfigRand(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -238,7 +276,19 @@ class ConfigRandLeTSeEStyle(
   barvinokBinary,
   barvinokLibraryPath,
   normalizeFeatures,
-  gpu,
+  evaluationStrategy,
+  learningSet,
+  decTreeMinSamplesLeaf,
+  learningAlgorithm,
+  randForestNTree,
+  randForestMaxFeatures,
+  pythonVEnvLocation,
+  samplingStrategy,
+  schedCoeffsMin,
+  schedCoeffsMax,
+  schedCoeffsExpectationValue,
+  scheduleEquivalenceRelation,
+  schedCoeffsAbsMax,
 
   numScheds,
   importScheds,
@@ -251,7 +301,7 @@ class ConfigRandLeTSeEStyle(
 
     MinimalConfig.toStringAppend("boundSchedCoeffs", boundSchedCoeffs, sb)
     MinimalConfig.toStringAppend("completeSchedules", completeSchedules, sb)
-    MinimalConfig.toStringAppend("weighDepsByStmtTraffic", weighDepsByStmtTraffic, sb)
+    MinimalConfig.toStringAppend("depsWeighingMethod", depsWeighingMethod, sb)
     return sb.toString()
   }
 }

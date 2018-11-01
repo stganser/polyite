@@ -12,9 +12,23 @@ import polyite.util.Rat
 import polyite.evolution.GeneticOperatorFactory
 import GeneticOperatorFactory.GeneticOperators
 import polyite.config.MinimalConfig.NumGeneratorsLimit
+import polyite.config.MinimalConfig.EvaluationStrategy
+import polyite.fitness.scikit_learn.Classifier
 
 object ConfigGA {
   val myLogger : Logger = Logger.getLogger("")
+
+  object ExecutionMode extends Enumeration {
+    val MPI, SINGLE_PROCESS = Value
+  }
+
+  object MigrationStrategy extends Enumeration {
+    val NEIGHBOR, NEIGHBORHOOD = Value
+  }
+
+  object GACpuTerminationCriteria extends Enumeration {
+    val FIXED_NUM_GENERATIONS, CONVERGENCE = Value
+  }
 
   def loadAndValidateConfig(f : File) : Option[ConfigGA] = {
     return parseConfig(MinimalConfig.loadProperties(f))
@@ -40,7 +54,8 @@ object ConfigGA {
       return None
 
     propName = "generatorCoeffMaxDenominator"
-    val generatorCoeffMaxDenominator : Option[Int] = MinimalConfig.getIntProperty(propName,
+    val generatorCoeffMaxDenominator : Option[Int] = MinimalConfig.getIntProperty(
+      propName,
       rawConf)
     if (!generatorCoeffMaxDenominator.isDefined) return None
     if (!MinimalConfig.checkMin(1, generatorCoeffMaxDenominator, propName)) return None
@@ -86,7 +101,8 @@ object ConfigGA {
       return None
 
     propName = "shareOfRandSchedsInPopulation"
-    val shareOfRandSchedsInPopulation : Option[Rat] = MinimalConfig.getRatProperty(propName,
+    val shareOfRandSchedsInPopulation : Option[Rat] = MinimalConfig.getRatProperty(
+      propName,
       rawConf)
     if (!shareOfRandSchedsInPopulation.isDefined)
       return None
@@ -147,6 +163,101 @@ object ConfigGA {
     val useConvexAnnealingFunction : Option[Boolean] = MinimalConfig.getBooleanProperty(propName, rawConf)
     if (!useConvexAnnealingFunction.isDefined)
       return None
+
+    propName = "executionMode"
+    val executionModeStr : String = MinimalConfig.getProperty(propName, rawConf) match {
+      case None    => return None
+      case Some(s) => s
+    }
+    val executionMode : Option[ExecutionMode.Value] = try {
+      Some(ConfigGA.ExecutionMode.withName(executionModeStr))
+    } catch {
+      case e : NoSuchElementException => {
+        return None
+      }
+    }
+
+    val migrationStrategy : Option[MigrationStrategy.Value] = if (executionMode.get == ExecutionMode.MPI) {
+      propName = "migrationStrategy"
+      MinimalConfig.getProperty(propName, rawConf) match {
+        case None => return None
+        case Some(s) =>
+          try {
+            Some(ConfigGA.MigrationStrategy.withName(s))
+          } catch {
+            case e : NoSuchElementException => {
+              myLogger.warning("The migration strategy must be one of " + ConfigGA.MigrationStrategy.values.mkString("{", ", ", "}: " + s))
+              return None
+            }
+          }
+      }
+    } else None
+
+    val migrationRate : Option[Int] = if (executionMode.get == ExecutionMode.MPI) {
+      propName = "migrationRate"
+      MinimalConfig.getIntProperty(propName, rawConf) match {
+        case None => return None
+        case v @ Some(_) => {
+          if (MinimalConfig.checkMin(0, v, propName))
+            v
+          else
+            return None
+        }
+      }
+    } else {
+      None
+    }
+
+    val migrationVolume : Option[Rat] = if (executionMode.get == ExecutionMode.MPI) {
+      propName = "migrationVolume"
+      MinimalConfig.getRatProperty(propName, rawConf) match {
+        case None => return None
+        case v @ Some(r) => {
+          if (!(r > Rat(0) && r <= Rat(1))) {
+            myLogger.warning(f"The value of migrationVolume must be from ]0, 1]. Found ${r}.")
+            return None
+          } else
+            v
+        }
+      }
+    } else {
+      None
+    }
+
+    val gaCpuTerminationCriterion : Option[GACpuTerminationCriteria.Value] = if (basicConf.evaluationStrategy == MinimalConfig.EvaluationStrategy.CPU || basicConf.evaluationStrategy == MinimalConfig.EvaluationStrategy.CLASSIFIER_AND_CPU) {
+      propName = "gaCpuTerminationCriterion"
+      val gaCpuTerminationCriterionStr : Option[String] = MinimalConfig.getProperty(propName, rawConf)
+      if (!gaCpuTerminationCriterionStr.isDefined)
+        return None
+      try {
+        Some(GACpuTerminationCriteria.withName(gaCpuTerminationCriterionStr.get))
+      } catch {
+        case e : NoSuchElementException => {
+          myLogger.warning("The termination criterion must be one of " + ConfigGA.GACpuTerminationCriteria.values.mkString("{", ", ", "}: " + gaCpuTerminationCriterionStr.get))
+          return None
+        }
+      }
+    } else {
+      None
+    }
+
+    var convergenceTerminationCriterionWindowSize : Option[Int] = None
+    var convergenceTerminationCriterionThreshold : Option[Double] = None
+
+    if (gaCpuTerminationCriterion.isDefined && gaCpuTerminationCriterion.get == ConfigGA.GACpuTerminationCriteria.CONVERGENCE) {
+      propName = "convergenceTerminationCriterionWindowSize"
+      convergenceTerminationCriterionWindowSize = MinimalConfig.getIntProperty(propName, rawConf)
+      if (!convergenceTerminationCriterionWindowSize.isDefined)
+        return None
+      if (!MinimalConfig.checkMin(2, convergenceTerminationCriterionWindowSize, propName))
+        return None
+      propName = "convergenceTerminationCriterionThreshold"
+      convergenceTerminationCriterionThreshold = MinimalConfig.getDoubleProperty(propName, rawConf)
+      if (!convergenceTerminationCriterionThreshold.isDefined)
+        return None
+      if (!MinimalConfig.checkMinMax(0, 1, convergenceTerminationCriterionThreshold, propName))
+        return None
+    }
 
     return Some(new ConfigGA(
       basicConf.numMeasurementThreads,
@@ -209,7 +320,19 @@ object ConfigGA {
       basicConf.barvinokBinary,
       basicConf.barvinokLibraryPath,
       basicConf.normalizeFeatures,
-      basicConf.gpu,
+      basicConf.evaluationStrategy,
+      basicConf.learningSet,
+      basicConf.decTreeMinSamplesLeaf,
+      basicConf.learningAlgorithm,
+      basicConf.randForestNTree,
+      basicConf.randForestMaxFeatures,
+      basicConf.pythonVEnvLocation,
+      basicConf.samplingStrategy,
+      basicConf.schedCoeffsMin,
+      basicConf.schedCoeffsMax,
+      basicConf.schedCoeffsExpectationValue,
+      basicConf.scheduleEquivalenceRelation,
+      basicConf.schedCoeffsAbsMax,
 
       probabilityToMutateSchedRow.get,
       probabilityToMutateGeneratorCoeff.get,
@@ -226,7 +349,14 @@ object ConfigGA {
       activeCrossovers,
       initPopulationNumRays.get,
       initPopulationNumLines.get,
-      useConvexAnnealingFunction.get))
+      useConvexAnnealingFunction.get,
+      executionMode.get,
+      migrationStrategy,
+      migrationRate,
+      migrationVolume,
+      gaCpuTerminationCriterion,
+      convergenceTerminationCriterionWindowSize,
+      convergenceTerminationCriterionThreshold))
   }
 }
 
@@ -291,7 +421,19 @@ class ConfigGA(
   barvinokBinary : File,
   barvinokLibraryPath : File,
   normalizeFeatures : Boolean,
-  gpu : Boolean,
+  evaluationStrategy : EvaluationStrategy.Value,
+  learningSet : Option[List[File]],
+  decTreeMinSamplesLeaf : Option[Int],
+  learningAlgorithm : Option[Classifier.LearningAlgorithms.Value],
+  randForestNTree : Option[Int],
+  randForestMaxFeatures : Option[Int],
+  pythonVEnvLocation : Option[File],
+  samplingStrategy : MinimalConfig.SamplingStrategy.Value,
+  schedCoeffsMin : Option[Int],
+  schedCoeffsMax : Option[Int],
+  schedCoeffsExpectationValue : Option[Double],
+  scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
+  schedCoeffsAbsMax : Option[Int],
 
   val probabilityToMutateSchedRow : Double,
   val probabilityToMutateGeneratorCoeff : Double,
@@ -308,7 +450,14 @@ class ConfigGA(
   val activeCrossovers : List[GeneticOperatorFactory.GeneticOperators.Value],
   val initPopulationNumRays : MinimalConfig.NumGeneratorsLimit,
   val initPopulationNumLines : MinimalConfig.NumGeneratorsLimit,
-  val useConvexAnnealingFunction : Boolean) extends Config(
+  val useConvexAnnealingFunction : Boolean,
+  val executionMode : ConfigGA.ExecutionMode.Value,
+  val migrationStrategy : Option[ConfigGA.MigrationStrategy.Value],
+  val migrationRate : Option[Int],
+  val migrationVolume : Option[Rat],
+  val gaCpuTerminationCriterion : Option[ConfigGA.GACpuTerminationCriteria.Value],
+  val convergenceTerminationCriterionWindowSize : Option[Int],
+  val convergenceTerminationCriterionThreshold : Option[Double]) extends Config(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -369,7 +518,19 @@ class ConfigGA(
   barvinokBinary,
   barvinokLibraryPath,
   normalizeFeatures,
-  gpu) {
+  evaluationStrategy,
+  learningSet,
+  decTreeMinSamplesLeaf,
+  learningAlgorithm,
+  randForestNTree,
+  randForestMaxFeatures,
+  pythonVEnvLocation,
+  samplingStrategy,
+  schedCoeffsMin,
+  schedCoeffsMax,
+  schedCoeffsExpectationValue,
+  scheduleEquivalenceRelation,
+  schedCoeffsAbsMax) {
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
@@ -388,6 +549,13 @@ class ConfigGA(
     MinimalConfig.toStringAppend("initPopulationNumRays", initPopulationNumRays, sb)
     MinimalConfig.toStringAppend("initPopulationNumLines", initPopulationNumLines, sb)
     MinimalConfig.toStringAppend("useConvexAnnealingFunction", useConvexAnnealingFunction, sb)
+    MinimalConfig.toStringAppend("executionMode", executionMode, sb)
+    MinimalConfig.toStringAppendOptional("migrationStrategy", migrationStrategy, sb)
+    MinimalConfig.toStringAppendOptional("migrationRate", migrationRate, sb)
+    MinimalConfig.toStringAppendOptional("migrationVolume", migrationVolume, sb)
+    MinimalConfig.toStringAppendOptional("gaCpuTerminationCriterion", gaCpuTerminationCriterion, sb)
+    MinimalConfig.toStringAppendOptional("convergenceTerminationCriterionWindowSize", convergenceTerminationCriterionWindowSize, sb)
+    MinimalConfig.toStringAppendOptional("convergenceTerminationCriterionThreshold", convergenceTerminationCriterionThreshold, sb)
 
     for (op <- GeneticOperators.values) {
       if (GeneticOperators.isMutator(op)) {
@@ -399,7 +567,6 @@ class ConfigGA(
         sb.append(op).append("Enabled=").append(activeCrossovers.contains(op)).append('\n')
       }
     }
-
     return sb.toString()
   }
 }

@@ -3,6 +3,7 @@ package polyite.schedule
 import java.util.logging.Logger
 
 import scala.collection.mutable.BitSet
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.mutable.ParArray
@@ -10,19 +11,24 @@ import scala.concurrent.forkjoin.ForkJoinPool
 import scala.math.BigInt.int2bigInt
 import scala.util.Random
 
+import isl.Isl
+import isl.Isl.TypeAliases.T_SET
 import polyite.ScopInfo
 import polyite.config.Config
-import polyite.config.MinimalConfig
+import polyite.config.ConfigRandLeTSeEStyle
 import polyite.config.MinimalConfig.LimitedGenerators
 import polyite.config.MinimalConfig.NumGeneratorsLimit
 import polyite.config.MinimalConfig.RandLimit
-import polyite.config.ConfigRandLeTSeEStyle
+import polyite.schedule.sampling.ChernikovaSamplingStrategy.ChernikovaParams
+import polyite.schedule.hash.ScheduleHash
 import polyite.util.Rat
 import polyite.util.Util
-import polyite.util.Util.GeneratorsRat
-
-import isl.Isl
-import isl.Isl.TypeAliases.T_SET
+import polyite.schedule.sampling.ChernikovaSamplingStrategy.GeneratorsRat
+import polyite.schedule.sampling.ScheduleSummand
+import polyite.schedule.sampling.SamplingStrategyParams
+import polyite.schedule.sampling.ChernikovaSamplingStrategy
+import polyite.schedule.sampling.SamplingStrategy
+import polyite.config.MinimalConfig
 
 /**
   * Generates random schedules in LeTSeE style. Each dependence is carried by
@@ -39,10 +45,16 @@ object CoeffSpaceLeTSeEStyle {
     * schedules contained by {@code basis} are also part of the result. The
     * result contains at most max(|basis|, maxNumScheds) schedules. If the search space
     * is empty, {@code None} is returned.
+    * @param domInfo models the schedule coefficient vector space
+    * @param deps data dependences of the program to optimize
+    * @param conf configuration properties
+    * @param hashSched this function determines the criterion according to which two schedules are equivalent.
     */
-  def genRandSchedules(scop : ScopInfo)(domInfo : DomainCoeffInfo,
+  def genRandSchedules(scop : ScopInfo)(
+    domInfo : DomainCoeffInfo,
     deps : Set[Dependence], maxNumSchedules : Int, basis : Set[Schedule],
-    conf : ConfigRandLeTSeEStyle) : Option[Set[Schedule]] = {
+    conf : ConfigRandLeTSeEStyle,
+    hashSched : Schedule => ScheduleHash) : Option[Set[Schedule]] = {
     myLogger.info("Constructing the schedule space.")
     val schedSpace : List[isl.Set] = constructScheduleSpace(deps, conf, domInfo, scop) match {
       case None     => return None
@@ -50,18 +62,18 @@ object CoeffSpaceLeTSeEStyle {
     }
     val schedSpaceDual : List[GeneratorsRat] = schedSpace.zipWithIndex.map((t : (isl.Set, Int)) => {
       myLogger.info("dualizing dimension polyhedron " + t._2)
-      Util.constraints2GeneratorsRat(t._1)
+      ChernikovaSamplingStrategy.constraints2GeneratorsRat(t._1)
     })
     myLogger.info("Starting to generate " + maxNumSchedules + " random schedules.")
 
     if (conf.moveVertices)
-      return Some(genSchedsFromCoeffSpace(domInfo, deps, moveVertices(schedSpaceDual, schedSpace), conf, maxNumSchedules, basis))
+      return Some(genSchedsFromCoeffSpace(domInfo, deps, moveVertices(schedSpaceDual, schedSpace), conf, maxNumSchedules, basis, hashSched))
     else
-      return Some(genSchedsFromCoeffSpace(domInfo, deps, schedSpaceDual, conf, maxNumSchedules, basis))
+      return Some(genSchedsFromCoeffSpace(domInfo, deps, schedSpaceDual, conf, maxNumSchedules, basis, hashSched))
   }
 
   def moveVertices(gs : List[GeneratorsRat], constraints : List[isl.Set]) : List[GeneratorsRat] = {
-    val allInteger : List[GeneratorsRat] = gs.zip(constraints).map(t => Util.moveVertices(t._1, t._2))
+    val allInteger : List[GeneratorsRat] = gs.zip(constraints).map(t => ChernikovaSamplingStrategy.moveVertices(t._1, t._2))
     var result : List[GeneratorsRat] = List.empty
 
     for ((g, p) <- allInteger.zip(constraints)) {
@@ -135,15 +147,16 @@ object CoeffSpaceLeTSeEStyle {
     return GeneratorsRat(g.vertices, raysFiltered, linesFiltered)
   }
 
-  private def genSchedsFromCoeffSpace(domInfo : DomainCoeffInfo,
+  private def genSchedsFromCoeffSpace(
+    domInfo : DomainCoeffInfo,
     deps : Set[Dependence], generators : List[GeneratorsRat], conf : ConfigRandLeTSeEStyle,
-    maxNumScheds : Int, basis : Set[Schedule]) : Set[Schedule] = {
-    val result : HashSet[Schedule] = HashSet.empty
-    basis.foreach(result.add)
+    maxNumScheds : Int, basis : Set[Schedule], hashSched : Schedule => ScheduleHash) : Set[Schedule] = {
+    val result : HashMap[ScheduleHash, Schedule] = HashMap.empty
+    basis.foreach((s : Schedule) => result.put(hashSched(s), s))
 
     // Find out the maximum number of generators of all dimensions
-    val maxNumRaysAllDims : Int = ScheduleSpaceUtils.getMaxNumRays(generators)
-    val maxNumLinesAllDims : Int = ScheduleSpaceUtils.getMaxNumLines(generators)
+    val maxNumRaysAllDims : Int = ChernikovaSamplingStrategy.getMaxNumRays(generators)
+    val maxNumLinesAllDims : Int = ChernikovaSamplingStrategy.getMaxNumLines(generators)
 
     def genScheds(idx : Int)(x : Unit) {
 
@@ -175,7 +188,7 @@ object CoeffSpaceLeTSeEStyle {
 
           // As long as the generated coefficient vector contains values that are not from {-1, 0, 1}, build a new vector.
           for ((gs : GeneratorsRat, dim : Int) <- generators.zipWithIndex) {
-            var (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = ScheduleUtils.generateScheduleVector(gs, 1, -1, 1,
+            var (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = ChernikovaSamplingStrategy.generateScheduleVector(gs, 1, -1, 1,
               currNumRaysLimit, currNumLinesLimit, conf)
 
             /*
@@ -184,7 +197,7 @@ object CoeffSpaceLeTSeEStyle {
            */
 
             while (conf.boundSchedCoeffs && !hasSuitableCoeffValues(coeffs)) {
-              val (coeffs1, schedSummands1) = ScheduleUtils.generateScheduleVector(gs, 1, -1, 1, currNumRaysLimit,
+              val (coeffs1, schedSummands1) = ChernikovaSamplingStrategy.generateScheduleVector(gs, 1, -1, 1, currNumRaysLimit,
                 currNumLinesLimit, conf)
               coeffs = coeffs1
               schedSummands = schedSummands1
@@ -194,8 +207,9 @@ object CoeffSpaceLeTSeEStyle {
 
           if (conf.completeSchedules) {
             try {
-              newSchedInner = ScheduleUtils.expandToFullSchedule(conf, currNumRaysLimit, currNumLinesLimit, newSchedInner,
-                generateLinIndepScheduleVector)
+              val samplerParams : ChernikovaParams = ChernikovaParams(currNumRaysLimit, currNumLinesLimit)
+              newSchedInner = ScheduleUtils.expandToFullSchedule(conf, ChernikovaSamplingStrategy, samplerParams,
+                newSchedInner, generateLinIndepScheduleVector)
             } catch {
               case t : Throwable => {
                 println(t.getClass.getName)
@@ -206,22 +220,27 @@ object CoeffSpaceLeTSeEStyle {
           newSchedInner
         }, conf.randSchedsTimeout * 1000)
 
+        var addedSomething : Boolean = false
         if (newSchedMaybe.isDefined) {
           result.synchronized {
-            if (result.size < maxNumScheds && result.add(newSchedMaybe.get)) {
+            if (result.size < maxNumScheds) {
               ScheduleUtils.assertValid(newSchedMaybe.get)
-              numConseqFailures = 0
-              myLogger.info("(schedule gen worker #" + idx
-                + ")New random schedule: " + newSchedMaybe.get)
-            } else {
-              myLogger.warning("(schedule gen worker #" + idx
-                + ") Timeout of schedule completion.")
-              numConseqFailures += 1
+              val h : ScheduleHash = hashSched(newSchedMaybe.get)
+              if (!result.contains(h)) {
+                result.put(h, newSchedMaybe.get)
+                numConseqFailures = 0
+                myLogger.info("(schedule gen worker #" + idx
+                  + ")New random schedule: " + newSchedMaybe.get)
+                addedSomething = true
+              }
             }
           }
         } else {
-          numConseqFailures += 1
+          myLogger.warning("(schedule gen worker #" + idx
+            + ") Timeout of schedule completion.")
         }
+        if (!addedSomething)
+          numConseqFailures += 1
       }
     }
 
@@ -233,7 +252,7 @@ object CoeffSpaceLeTSeEStyle {
 
     if (result.size < maxNumScheds)
       myLogger.warning("Failed to produce as many schedules as requested: " + result.size)
-    return result.toSet
+    return result.values.toSet
   }
 
   /**
@@ -266,9 +285,9 @@ object CoeffSpaceLeTSeEStyle {
     while (!depsSorted.isEmpty) {
       val (coeffSpace : isl.Set, stillUncarried : Set[Dependence]) = calculateCoeffSpace(depsSorted, depsSorted, domInfo,
         initBoundingBox) match {
-          case None     => return None
-          case Some(sp) => sp
-        }
+        case None     => return None
+        case Some(sp) => sp
+      }
       dimPolyhedra ::= coeffSpace
       depsSorted = depsSorted.filter(stillUncarried.contains)
       System.gc()
@@ -279,7 +298,8 @@ object CoeffSpaceLeTSeEStyle {
     return Some(dimPolyhedra.reverse)
   }
 
-  private def calculateCoeffSpace(deps : Iterable[Dependence],
+  private def calculateCoeffSpace(
+    deps : Iterable[Dependence],
     depsToCarry : Iterable[Dependence], domInfo : DomainCoeffInfo, universeBounded : isl.Set) : Option[(isl.Set, Set[Dependence])] = {
 
     var coeffSpace : isl.Set = domInfo.universe
@@ -309,11 +329,13 @@ object CoeffSpaceLeTSeEStyle {
 
   private def sortDeps(deps : List[Dependence], scop : ScopInfo,
     initBoundingBox : isl.Set, conf : ConfigRandLeTSeEStyle) : List[Dependence] = {
-    val dep2TrafficSize : Map[Dependence, Long] = if (conf.weighDepsByStmtTraffic)
-      ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps, scop, conf)
-    else
-      ScheduleSpaceUtils.calcTrafficSizesOfDeps(deps, scop, conf)
-    val dep2Interference : Map[Dependence, Int] = ScheduleSpaceUtils.calcInterferenceOfDeps(deps,
+    val dep2TrafficSize : Map[Dependence, Long] = conf.depsWeighingMethod match {
+      case ConfigRandLeTSeEStyle.DepsWeighingMethod.STMT_MEM_TRAFFIC        => ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps, scop, conf)
+      case ConfigRandLeTSeEStyle.DepsWeighingMethod.APPROX_STMT_MEM_TRAFFIC => ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmtsApprox(deps, scop, conf)
+      case ConfigRandLeTSeEStyle.DepsWeighingMethod.DEP_CACHE_FOOT_PRINT    => ScheduleSpaceUtils.calcTrafficSizesOfDeps(deps, scop, conf)
+    }
+    val dep2Interference : Map[Dependence, Int] = ScheduleSpaceUtils.calcInterferenceOfDeps(
+      deps,
       initBoundingBox)
     implicit val depOrd : Ordering[Dependence] = new Ordering[Dependence]() {
 
@@ -334,9 +356,10 @@ object CoeffSpaceLeTSeEStyle {
     return deps.sorted
   }
 
-  def generateLinIndepScheduleVector(s : Schedule, maxNumRays : NumGeneratorsLimit,
-    maxNumLines : NumGeneratorsLimit, conf : Config) : Option[(List[Rat], Set[ScheduleSummand])] = {
-
+  def generateLinIndepScheduleVector(s : Schedule, sampler : SamplingStrategy, samplerParams : SamplingStrategyParams,
+    conf : Config) : Option[(List[Rat], Set[ScheduleSummand])] = {
+    val maxNumRays : NumGeneratorsLimit = samplerParams.asInstanceOf[ChernikovaParams].currNumRaysLimit
+    val maxNumLines : NumGeneratorsLimit = samplerParams.asInstanceOf[ChernikovaParams].currNumLinesLimit
     val confLetsee : ConfigRandLeTSeEStyle = conf.asInstanceOf[ConfigRandLeTSeEStyle]
 
     val linIndepCoeffSpace : isl.Set = s.computeLinIndepSpace(s.numDims, !conf.linIndepVectsDoNotFixDims) match {
@@ -353,11 +376,11 @@ object CoeffSpaceLeTSeEStyle {
 
     while (schedVect == null) {
       val randLinIndepBSet : isl.BasicSet = linIndepBSets.getBasicSet(Random.nextInt(linIndepBSets.nBasicSet()))
-      var g : GeneratorsRat = Util.constraints2GeneratorsRat(randLinIndepBSet, conf.moveVertices, conf.rayPruningThreshold)
+      var g : GeneratorsRat = ChernikovaSamplingStrategy.constraints2GeneratorsRat(randLinIndepBSet, conf.moveVertices, conf.rayPruningThreshold)
       if (conf.moveVertices) {
         g = moveVertices(List(g), List(randLinIndepBSet)).head
       }
-      val (schedVect1 : List[Rat], schedSummands1 : Set[ScheduleSummand]) = ScheduleUtils.generateScheduleVector(g, 1, -1, 1, maxNumRays, maxNumLines, conf)
+      val (schedVect1 : List[Rat], schedSummands1 : Set[ScheduleSummand]) = ChernikovaSamplingStrategy.generateScheduleVector(g, 1, -1, 1, maxNumRays, maxNumLines, conf)
       if (!confLetsee.boundSchedCoeffs || hasSuitableCoeffValues(schedVect1)) {
         schedVect = schedVect1
         schedSummands = schedSummands1

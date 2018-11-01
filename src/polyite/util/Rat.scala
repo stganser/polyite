@@ -6,33 +6,48 @@ import scala.annotation.elidable
 import scala.annotation.elidable.ASSERTION
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigInt.int2bigInt
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.TreeSet
 
 object Rat {
+  object RatNumDenomOrdering extends Ordering[(BigInt, BigInt, Rat)] {
+    override def compare(a: (BigInt, BigInt, Rat), b: (BigInt, BigInt, Rat)) : Int = {
 
-  val singleDigitInts : ArrayBuffer[Rat] = {
-    val a : ArrayBuffer[Rat] = new ArrayBuffer(19)
-    for (i <- -9 until 10) {
-      a.append(Rat(i, 1))
+      if (a._1 != b._1)
+        return if (a._1 < b._1) -1 else 1
+      if (a._2 != b._2)
+        return if (a._2 < b._2) -1 else 1
+      return 0 //equal
     }
-    a
   }
+  /**
+   * Caches all Rat instances.
+   */
+  private val cache : TreeSet[(BigInt, BigInt, Rat)] = TreeSet.empty(RatNumDenomOrdering)
 
   def apply(numerator : BigInt, denominator : BigInt) : Rat = {
     if (denominator == 0)
       throw new IllegalArgumentException("the denominator must not be 0")
-    val r = new Rat
-    r.n = numerator
-    r.d = denominator
 
-    if (denominator != 1)
-      r.reduce
-    r.correctSign
-    return r
+    cache.synchronized{
+      val findcached = (x:(BigInt, BigInt, Rat)) => x._1 == numerator && x._2 == denominator
+      val cached = cache.find(findcached(_))
+      if (cached.isDefined) {
+        cached.get._3
+      } else {
+        val rat = new Rat
+        rat.n = numerator
+        rat.d = denominator
+        if (denominator != 1)
+          rat.reduce
+        rat.correctSign
+        cache.add((numerator, denominator, rat))
+        rat
+      }
+    }
   }
 
   def apply(n : BigInt) : Rat = {
-    if (-9 <= n && n <= 9)
-      return singleDigitInts((9 + n).intValue())
     return apply(n, 1)
   }
 
@@ -73,10 +88,22 @@ object Rat {
     * Parses Strings of the format "\(-?[0-9]+( / [0-9]+)?\)" to Rat.
     * @throws NumberFormatException thrown if s does not match the expected format.
     */
-  def fromString(s : String) : Rat = {
-    val regexp : String = "\\(-?[0-9]+( / [0-9]+)?\\)"
-    if (!s.matches(regexp))
-      throw new NumberFormatException("s does not match the expected format " + regexp + ": " + s)
+  def fromString(s : String) : Rat = fromStringOptCheck(true)(s)
+
+  /**
+   * Parses Strings to Rat, but omits any validity checks.
+   */
+  def fromStringNoCheck(s: String): Rat = fromStringOptCheck(false)(s)
+  
+  /**
+   * Parses Strings to Rat, optionally checking for validity.
+   */
+  def fromStringOptCheck(checkvalid : Boolean)(s : String) : Rat = {
+    if (checkvalid) {
+      val regexp: String = "\\(-?[0-9]+( / [0-9]+)?\\)"
+      if (!s.matches(regexp))
+        throw new NumberFormatException("s does not match the expected format " + regexp + ": " + s)
+    }
     val stripped : String = s.replaceFirst("\\(", "").replaceFirst("\\)", "")
     val tokens : Array[String] = stripped.split(" / ")
     val nums : Array[BigInt] = tokens.map { t => BigInt(t) }
@@ -160,6 +187,7 @@ object Rat {
       try { fromString("(-001 / -3)") } catch { case e : NumberFormatException => success = true }
       success
     })
+    println("Done.")
   }
 }
 

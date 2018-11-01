@@ -137,7 +137,25 @@ function writeGAConfig {
     echo "barvinokBinary=${HOME}/workspace/count_integer_points/count_integer_points" >> ${output}
     echo "barvinokLibraryPath=${HOME}/workspace/barvinok/barvinok/install/lib" >> ${output}
     echo "normalizeFeatures=true" >> ${output}
-    echo "gpu=false" >> ${output}
+    echo "evaluationStrategy=CPU" >> ${output}
+    echo "learningSet=" >> ${output}
+    echo "decTreeMinSamplesLeaf=15" >> ${output}
+    echo "learningAlgorithm=CART" >> ${output}
+    echo "randForestNTree=100" >> ${output}
+    echo "randForestMaxFeatures=8" >> ${output}
+    echo "executionMode=SINGLE_PROCESS" >> ${output}
+    echo "pythonVEnvLocation=NONE" >> ${output}
+    echo "samplingStrategy=CHERNIKOVA" >> ${output}
+    echo "schedCoeffsMin=-4" >> ${output}
+    echo "schedCoeffsMax=4" >> ${output}
+    echo "schedCoeffsExpectationValue=1.43" >> ${output} # 1 / 0.7
+    echo "migrationRate = 1" >> ${output}
+    echo "migrationVolume = (1 / 2)" >> ${output}
+    echo "scheduleEquivalenceRelation = RATIONAL_MATRIX_AND_GENERATORS" >> ${output}
+    echo "schedCoeffsAbsMax = 3" >> ${output}
+    echo "gaCpuTerminationCriterion = FIXED_NUM_GENERATIONS" >> ${output}
+    echo "convergenceTerminationCriterionWindowSize = 10" >> ${output}
+    echo "convergenceTerminationCriterionThreshold = 0.025" >> ${output}
 }
 
 function writeRandExpConf {
@@ -191,8 +209,8 @@ function writeRandExpConf {
     echo "boundSchedCoeffs=true" >> ${output}
     echo "moveVertices=false" >> ${output}
     echo "rayPruningThreshold=NONE" >> ${output}
-    echo "seqPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=false -mllvm -polly-tiling=false -mllvm -polly-vectorizer=none -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
-    echo "parPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=true -mllvm -polly-tiling=true -mllvm -polly-default-tile-size=64 -mllvm -polly-vectorizer=none -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
+    echo "seqPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=false -mllvm -polly-tiling=false -mllvm -polly-vectorizer=none -mllvm -polly-dependences-computeout=0 -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
+    echo "parPollyOptFlags=-mllvm -polly-position=early -mllvm -polly-process-unprofitable=true -mllvm -polly-parallel=true -mllvm -polly-dependences-computeout=0 -mllvm -polly-tiling=true -mllvm -polly-default-tile-size=64 -mllvm -polly-vectorizer=none -D${dataSetSize} -DPOLYBENCH_USE_C99_PROTO" >> ${output}
     echo "insertSetNodes=false" >> ${output}
     echo "compilationTimeout=300" >> ${output}
     echo "benchmarkingSurrenderTimeout=$((20*60))" >> ${output}
@@ -215,8 +233,23 @@ function writeRandExpConf {
     echo "schedTreeSimplElimSuperfluousDimNodes=true" >> ${output}
     echo "numSchedTreeSimplDurationMeasurements=NONE" >> ${output}
     echo "normalizeFeatures=true" >> ${output}
-    echo "gpu=false" >> ${output}
-    echo "weighDepsByStmtTraffic=true" >> ${output}
+    echo "evaluationStrategy=CPU" >> ${output}
+    echo "pythonVEnvLocation=NONE" >> ${output}
+    echo "depsWeighingMethod=STMT_MEM_TRAFFIC" >> ${output}
+    echo "samplingStrategy=CHERNIKOVA" >> ${output}
+    echo "schedCoeffsMin=-4" >> ${output}
+    echo "schedCoeffsMax=4" >> ${output}
+    echo "schedCoeffsExpectationValue=1.43" >> ${output} # 1 / 0.7
+    echo "scheduleEquivalenceRelation = RATIONAL_MATRIX_AND_GENERATORS" >> ${output}
+    echo "schedCoeffsAbsMax = 3" >> ${output}
+    echo "normalizeFeatures=true" >> ${output}
+    echo "learningSet=" >> ${output}
+    echo "decTreeMinSamplesLeaf=15" >> ${output}
+    echo "learningAlgorithm=CART" >> ${output}
+    echo "randForestNTree=100" >> ${output}
+    echo "randForestMaxFeatures=8" >> ${output}
+    echo "executionMode=SINGLE_PROCESS" >> ${output}
+    echo "pythonVEnvLocation=NONE" >> ${output}
 }
 
 if [ ${#} -lt 2 ]
@@ -338,11 +371,11 @@ do
         rm ${tmpLinked}
     }
 
-    generateIRAndLinkAndCanonicalize "" ${benchmarkName}.preopt.ll
-    generateIRAndLinkAndCanonicalize "${timeFlag}" ${benchmarkName}.preopt.ll.time
-    generateIRAndLinkAndCanonicalize "-DPOLYBENCH_DUMP_ARRAYS"\
-     ${benchmarkName}.preopt.ll.dump_arrays
-    generateIRAndLinkAndCanonicalize ${papiFlag} ${benchmarkName}.preopt.ll.papi
+#    generateIRAndLinkAndCanonicalize "" ${benchmarkName}.preopt.ll
+#    generateIRAndLinkAndCanonicalize "${timeFlag}" ${benchmarkName}.preopt.ll.time
+#    generateIRAndLinkAndCanonicalize "-DPOLYBENCH_DUMP_ARRAYS"\
+#     ${benchmarkName}.preopt.ll.dump_arrays
+#    generateIRAndLinkAndCanonicalize ${papiFlag} ${benchmarkName}.preopt.ll.papi
 
     echo "Copying benchmark source files for ${benchmarkName}."
     cp ../${benchmarkPath}/${benchmarkName}.* ../utilities/polybench.c ../utilities/polybench.h .
@@ -389,7 +422,6 @@ do
         do
             pollyConfCompl="${pollyConfig} -mllvm -polly-only-func=${kernelFunctionName} \
 -mllvm -polly-only-region=${regionEntryPoint} ${polybenchDFlags}"
-            dumpAst ${pollyConfigName} "${pollyConfCompl}" ${kernelFunctionName} ${regionEntryPoint}
             if [ ${generateBaseline} == "true" ]
             then
                 echo "Scheduling baseline measurement for polly configuration ${pollyConfigName}"

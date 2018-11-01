@@ -1,4 +1,4 @@
-package polyite.schedule
+package polyite.schedule.sampling
 
 import polyite.util.Rat
 

@@ -222,7 +222,8 @@ object ScheduleTreeConstruction {
         }).toList
         (new SeqNode(currDomain, children, List(currDim)), deleteConst(currSchedReduced))
       } else {
-        (buildBasicScheduleTree(currDim + 1, schedDims, sttmts, domain, context, domInfo, depsUncarried, insertSetNodes,
+        (
+          buildBasicScheduleTree(currDim + 1, schedDims, sttmts, domain, context, domInfo, depsUncarried, insertSetNodes,
           splitLoopBodies),
           currSchedReduced)
       }
@@ -320,7 +321,8 @@ object ScheduleTreeConstruction {
     return groups.map(f => (f._1, f._2.keySet)).toList.sortBy(f => f._1).map(f => f._2.toSet)
   }
 
-  private def buildSetPartitioning(sttmts : Set[String],
+  private def buildSetPartitioning(
+    sttmts : Set[String],
     deps : Set[Dependence]) : Set[Set[String]] = {
     val withDeps : Set[String] = sttmts.filter { s =>
       deps.exists { d =>
@@ -342,6 +344,9 @@ object ScheduleTreeConstruction {
   }
 
   def simplifyOffsetWithParamEqs(sched : isl.UnionMap, context : isl.UnionSet) : isl.UnionMap = {
+
+    if (context.nSet() < 1)
+      return sched
 
     val eqMatrix : isl.Mat = isl.Set.fromUnionSet(context).getBasicSetList.getBasicSet(0)
       .detectEqualities().equalitiesMatrix(T_CST, T_PAR, T_SET, T_DIV)

@@ -8,6 +8,8 @@ import polyite.util.Rat
 import polyite.util.Util
 import polyite.util.ParseArgs
 import scala.collection.mutable.HashMap
+import polyite.config.MinimalConfig.EvaluationStrategy
+import polyite.fitness.scikit_learn.Classifier
 
 /**
   * Config is the basic type for configurations in the search based schedule
@@ -44,7 +46,8 @@ object Config {
     val scopRegionEnd : Option[String] = MinimalConfig.getProperty("scopRegionEnd", rawConf)
     if (!scopRegionEnd.isDefined) return None
 
-    val irFilesLocation : Option[File] = MinimalConfig.getFileProperty("irFilesLocation",
+    val irFilesLocation : Option[File] = MinimalConfig.getFileProperty(
+      "irFilesLocation",
       rawConf)
     if (!Util.checkFileExistsAndHasRequiredPermissions(true, false, true, true,
       irFilesLocation.get)) return None
@@ -125,7 +128,19 @@ object Config {
       conf.barvinokBinary,
       conf.barvinokLibraryPath,
       conf.normalizeFeatures,
-      conf.gpu))
+      conf.evaluationStrategy,
+      conf.learningSet,
+      conf.decTreeMinSamplesLeaf,
+      conf.learningAlgorithm,
+      conf.randForestNTree,
+      conf.randForestMaxFeatures,
+      conf.pythonVEnvLocation,
+      conf.samplingStrategy,
+      conf.schedCoeffsMin,
+      conf.schedCoeffsMax,
+      conf.schedCoeffsExpectationValue,
+      conf.scheduleEquivalenceRelation,
+      conf.schedCoeffsAbsMax))
   }
 }
 
@@ -190,7 +205,19 @@ class Config(
   barvinokBinary : File,
   barvinokLibraryPath : File,
   normalizeFeatures : Boolean,
-  gpu : Boolean) extends MinimalConfig(
+  evaluationStrategy : EvaluationStrategy.Value,
+  learningSet : Option[List[File]],
+  decTreeMinSamplesLeaf : Option[Int],
+  learningAlgorithm : Option[Classifier.LearningAlgorithms.Value],
+  randForestNTree : Option[Int],
+  randForestMaxFeatures : Option[Int],
+  pythonVEnvLocation : Option[File],
+  samplingStrategy : MinimalConfig.SamplingStrategy.Value,
+  schedCoeffsMin : Option[Int],
+  schedCoeffsMax : Option[Int],
+  schedCoeffsExpectationValue : Option[Double],
+  scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
+  schedCoeffsAbsMax : Option[Int]) extends MinimalConfig(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -244,7 +271,19 @@ class Config(
   barvinokBinary,
   barvinokLibraryPath,
   normalizeFeatures,
-  gpu) {
+  evaluationStrategy,
+  learningSet,
+  decTreeMinSamplesLeaf,
+  learningAlgorithm,
+  randForestNTree,
+  randForestMaxFeatures,
+  pythonVEnvLocation,
+  samplingStrategy,
+  schedCoeffsMin,
+  schedCoeffsMax,
+  schedCoeffsExpectationValue,
+  scheduleEquivalenceRelation,
+  schedCoeffsAbsMax) {
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder

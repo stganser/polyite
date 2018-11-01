@@ -16,6 +16,7 @@ import polyite.export.JSCOPInterface
 import polyite.export.ScheduleExport
 import polyite.sched_eval.EvalResult
 import java.io.File
+import polyite.schedule.sampling.ScheduleSummand
 
 /**
   * Mutable representation of a polyhedral schedule. Different representations
@@ -187,7 +188,25 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     strRepr = null
     schedMap = null
   }
-
+   /**
+    * Appends a new (inner) dimension to this schedule.
+    * This avoids costly recalculating of dependencies,
+    * if dependencies are are already known.
+    * Used when migrating schedules between MPI nodes.
+    *
+    * @param coeffs rational schedule coefficients of the new schedule dimension.
+    * @param schedSummands the linear combination of Chernikova generators that
+    * formed {@code coeffs}.
+    * @param dependencies the dependencies strongly satisfied by this dimension
+    */
+  def addScheduleVector(coeffs : List[Rat], schedSummands : Set[ScheduleSummand]
+      ,dependencies : Set[Dependence]) {
+    scheduleSummands.append(schedSummands)
+    scheduleVectors.append(coeffs)
+    dim2StronglySatisfiedDeps.append(dependencies)
+    strRepr = null
+    schedMap = null
+  }
   /**
     * Appends a new (inner) dimension to this schedule that is equal to
     * dimension {@code otherDim} of schedule {@code o}.
@@ -438,7 +457,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   def carriesNewDependency(dim : Int) : Boolean = !getDepsNewlyCarriedBy(dim).isEmpty
 
   /**
-    * Returns the set of dependences that are satisfied stronly by dimension {@code dim}
+    * Returns the set of dependences that are satisfied strongly by dimension {@code dim}
     * and have not been carried before by any other dimension.
     */
   def getDepsNewlyCarriedBy(dim : Int) : Set[Dependence] = {
@@ -590,6 +609,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     var allZero : Boolean = true
 
     for ((_, StmtCoeffInfo(itStart, nrIt, parStart, cstIdx)) <- domInfo.stmtInfo) {
+      if (Thread.interrupted())
+        throw new InterruptedException()
       // linear independence for iterator coeffs only is required (params and consts are irrelevant)
       val linIndepSpace : isl.Set = Schedule.computeLinIndepSpaceBigInt(
         domInfo, schedVects, itStart, nrIt)
@@ -612,7 +633,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     if (allZero)
       return None
     else
-      return Some(Isl.simplify(result))
+      return Some(result)
   }
 
   /**

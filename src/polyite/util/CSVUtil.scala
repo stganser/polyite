@@ -117,7 +117,7 @@ object CSVUtil {
     */
   def getLongValueFromColumnKey(line : Map[String, String], columnKey : String, lineNum : Int, csvFileName : String) : Option[Long] =
     getValueForColumnKey(line, columnKey, lineNum, csvFileName, (s : String) => s.toLong, "long integer")
-    
+
   /**
     * Takes a map that corresponds to a line of a CSV file and checks whether it contains a boolean value for the given
     * column key. If the value {@code v} exists and can is a boolean @code Some(v)} is returned. Otherwise a warning is
@@ -125,4 +125,18 @@ object CSVUtil {
     */
   def getBooleanValueFromColumnKey(line : Map[String, String], columnKey : String, lineNum : Int, csvFileName : String) : Option[Boolean] =
     getValueForColumnKey(line, columnKey, lineNum, csvFileName, (s : String) => s.toBoolean, "boolean")
+
+  /**
+    * Takes a map that corresponds to a line of a CSV file and checks whether it contains a file path with the given
+    * properties for the given column key. If the value {@code v} exists and can is a boolean @code Some(v)} is returned. Otherwise a warning is
+    * logged and {@code None} is returned.
+    */
+  def getFileValueFromColumnKey(line : Map[String, String], columnKey : String, lineNum : Int, csvFileName : String,
+    r : Boolean, w : Boolean, x : Boolean, isDir : Boolean) : Option[File] = {
+    val path : String = getValueForColumnKey(line, columnKey, lineNum, csvFileName).getOrElse(return None)
+    val f : File = new File(path)
+    if (Util.checkFileExistsAndHasRequiredPermissions(r, w, x, isDir, f))
+      return Some(f)
+    return None
+  }
 }
