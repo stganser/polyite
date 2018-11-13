@@ -62,14 +62,10 @@ class MigrateNeighbor(mpi : IMPI, conf : ConfigGA) extends MigrationStrategy {
 
     val numScheds2Migrate : Int = (Rat(basis.size) * conf.migrationVolume.get).intFloor.toInt
     mpi.info(s"ready to migrate $numScheds2Migrate schedules")
+    val currentGenerationDiv : Int = currentGeneration / conf.migrationRate.get
 
-    val neighborRankRight = if ((currentGeneration % 2) == 0) mpi.getRightNeighborRank() else mpi.getLeftNeighborRank()
-    val neighborRankLeft = if ((currentGeneration % 2) == 0) mpi.getLeftNeighborRank() else mpi.getRightNeighborRank()
-
-    if ((currentGeneration % conf.migrationRate.get) != 0) {
-      mpi.info("skipped migration for generation " + currentGeneration)
-      return List.empty
-    }
+    val neighborRankRight = if ((currentGenerationDiv % 2) == 0) mpi.getRightNeighborRank() else mpi.getLeftNeighborRank()
+    val neighborRankLeft = if ((currentGenerationDiv % 2) == 0) mpi.getLeftNeighborRank() else mpi.getRightNeighborRank()
 
     if ((mpi.size() % 2) != 0 && mpi.size() > 1 && mpi.rank() == mpi.size() - 1) {
       mpi.warn("highest mpi-instance does not have a partner and cannot participate")
