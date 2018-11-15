@@ -122,7 +122,6 @@ object ScheduleClassification extends AbstractFitnessEvaluation {
       return
     }
 
-    val tmpCtx : isl.Ctx = isl.Ctx.alloc()
     val logPrefix : String = "(benchmarking worker #" + workerId + ")"
     myLogger.info(logPrefix + "benchmarking schedule: " + s)
     val fVect : FeatureVect = FeatureCalculator.calcFeatures(s.getSchedule, Some(schedTreeTiling), Some(schedTree), domInfo, scop, scopMetrics, deps, features, conf)
