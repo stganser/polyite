@@ -112,7 +112,7 @@ object ScheduleClassification extends AbstractFitnessEvaluation {
 
   protected override def benchmarkSchedule(workerId : Int)(s : Schedule) {
     val schedTree : ScheduleNode = FeatureCalculator.getSimplifiedSchedTree(s.getSchedule, domInfo, scop, deps, true)
-    val schedTreeTiling : ScheduleNode = if (config.splitLoopBodies)
+    val schedTreeTiling : ScheduleNode = if (conf.splitLoopBodies)
       schedTree
     else
       FeatureCalculator.getSimplifiedSchedTree(s.getSchedule, domInfo, scop, deps, conf.splitLoopBodies)
