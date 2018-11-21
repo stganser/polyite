@@ -83,11 +83,7 @@ then
     i=$((i + 1))
     numactlConf=${!i}
 fi
-irFile="${irFilesLocation}/${benchmarkName}/${benchmarkName}.preopt.ll"
 sourceLocation="${irFilesLocation}/${benchmarkName}"
-irFileTime="${irFile}.time"
-irFileValidateOutput="${irFile}.dump_arrays"
-irFilePapi="${irFile}.papi"
 
 polybenchH="${sourceLocation}/polybench.h"
 polybenchC="${sourceLocation}/polybench.c"
@@ -145,14 +141,6 @@ if [ ${useNumactl} == "true" ]
 then
     checkStringNotEmpty ${numactlConf} "numactlConf"
 fi
-for f in ${irFile} ${irFileTime} ${irFileValidateOutput} ${polybenchH} ${polybenchC} ${benchmarkH} ${benchmarkC}
-do
-    if [ ! -r ${f} ]
-    then
-        printerr "File ${f} cannot be read."
-        exit 1
-    fi
-done
 
 if [ ! -r ${referenceOutputFile} ]
 then
