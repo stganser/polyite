@@ -182,7 +182,7 @@ do
 done
 # test whether the schedule is valid
 pollyFuncRegionFlags="-mllvm -polly-only-func=${functionName} -mllvm -polly-only-region=${scopRegionStart}"
-pollyFlags="-mllvm -polly -mllvm -polly-import -mllvm -polly-optimizer=none \
+pollyFlags="-mllvm -polly -mllvm -polly-import -mllvm -polly-optimizer=none -mllvm -polly-dependences-computeout=0 \
 -mllvm -polly-import-jscop-read-schedule-tree=true ${pollyFuncRegionFlags}"
 
 ${polly} -march=native -O3 ${pollyFlags} ${seqPollyOptFlags} -mllvm -polly-code-generator=none ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -lpapi -o /dev/null  > schedImportOut 2>&1 &
