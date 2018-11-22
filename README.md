@@ -293,6 +293,17 @@
   pass a given [numactl](https://github.com/numactl/numactl) configuration to
   the benchmarking script.
 
+### Strip Mining (aka Pre-Vectorization)
+In the evaluation of our papers about Polyite, pre-vectorization by Polly was
+disabled (`-polly-vectorizer=none`). At least in Polly 3.8/3.9 Polyite will
+break Polly's schedule tree optimization, as the pre-vectorizer operates on any
+schedule tree band node that has a coincident member. Yet, Polly seems to
+expect that coincident members occur only in band nodes whose iteration domain
+contains a single statement. We provide the configuration option `expectPrevectorization` which, if set to `true`, will cause Polyite to process
+schedule trees that will not break Polly's pre-vectorizer. This feature is experimental and is only meant as a basic support for pre-vectorization with
+Polly. It is unclear, whether Polyite is suitable for a schedule search space
+exploration with pre-vectorization enabled in its current state. Suggestions for improvements are welcome.
+
 ### Schedule Classification
   Polyite has the ability to learn performance models from the results of
   previous iterative optimization runs. It can use these models to speed up
