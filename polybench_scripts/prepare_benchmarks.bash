@@ -156,6 +156,7 @@ function writeGAConfig {
     echo "gaCpuTerminationCriterion = FIXED_NUM_GENERATIONS" >> ${output}
     echo "convergenceTerminationCriterionWindowSize = 10" >> ${output}
     echo "convergenceTerminationCriterionThreshold = 0.025" >> ${output}
+    echo "expectPrevectorization=false" >> ${output}
 }
 
 function writeRandExpConf {
@@ -250,6 +251,7 @@ function writeRandExpConf {
     echo "randForestMaxFeatures=8" >> ${output}
     echo "executionMode=SINGLE_PROCESS" >> ${output}
     echo "pythonVEnvLocation=NONE" >> ${output}
+    echo "expectPrevectorization=false" >> ${output}
 }
 
 if [ ${#} -lt 2 ]
