@@ -302,7 +302,9 @@ expect that coincident members occur only in band nodes whose iteration domain
 contains a single statement. We provide the configuration option `expectPrevectorization` which, if set to `true`, will cause Polyite to process
 schedule trees that will not break Polly's pre-vectorizer. This feature is experimental and is only meant as a basic support for pre-vectorization with
 Polly. It is unclear, whether Polyite is suitable for a schedule search space
-exploration with pre-vectorization enabled in its current state. Suggestions for improvements are welcome.
+exploration with pre-vectorization enabled in its current state.
+
+Suggestions for improvements are welcome :-)
 
 ### Schedule Classification
   Polyite has the ability to learn performance models from the results of
