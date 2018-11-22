@@ -546,6 +546,11 @@ object MinimalConfig {
       }
     }
 
+    propName = "expectPrevectorization"
+    val expectPrevectorization : Option[Boolean] = getBooleanProperty(propName, rawConf)
+    if (!expectPrevectorization.isDefined)
+      return None
+
     return Some(new MinConfig(
       numMeasurementThreads.get,
       rayCoeffsRange.get,
@@ -612,7 +617,8 @@ object MinimalConfig {
       schedCoeffsMax,
       schedCoeffsExpectationValue,
       scheduleEquivalenceRelation,
-      schedCoeffsAbsMax))
+      schedCoeffsAbsMax,
+      expectPrevectorization.get))
   }
 
   /**
@@ -878,7 +884,8 @@ abstract class MinimalConfig(
   val schedCoeffsMax : Option[Int],
   val schedCoeffsExpectationValue : Option[Double],
   val scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
-  val schedCoeffsAbsMax : Option[Int]) {
+  val schedCoeffsAbsMax : Option[Int],
+  val expectPrevectorization : Boolean) {
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
@@ -953,6 +960,7 @@ abstract class MinimalConfig(
     }
     MinimalConfig.toStringAppend("scheduleEquivalenceRelation", scheduleEquivalenceRelation, sb)
     MinimalConfig.toStringAppendOptional("schedCoeffsAbsMax", schedCoeffsAbsMax, sb)
+    MinimalConfig.toStringAppend("expectPrevectorization", expectPrevectorization, sb)
     return sb.toString()
   }
 }
@@ -1026,7 +1034,8 @@ class MinConfig(
   schedCoeffsMax : Option[Int],
   schedCoeffsExpectationValue : Option[Double],
   scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
-  schedCoeffsAbsMax : Option[Int]) extends MinimalConfig(
+  schedCoeffsAbsMax : Option[Int],
+  expectPrevectorization : Boolean) extends MinimalConfig(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -1092,5 +1101,6 @@ class MinConfig(
   schedCoeffsMax,
   schedCoeffsExpectationValue,
   scheduleEquivalenceRelation,
-  schedCoeffsAbsMax) {
+  schedCoeffsAbsMax,
+  expectPrevectorization) {
 }

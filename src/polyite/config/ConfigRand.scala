@@ -114,6 +114,7 @@ object ConfigRand {
       basicConf.schedCoeffsExpectationValue,
       basicConf.scheduleEquivalenceRelation,
       basicConf.schedCoeffsAbsMax,
+      basicConf.expectPrevectorization,
 
       numScheds.get,
       importScheds.get,
@@ -196,6 +197,7 @@ class ConfigRand(
   schedCoeffsExpectationValue : Option[Double],
   scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
   schedCoeffsAbsMax : Option[Int],
+  expectPrevectorization : Boolean,
 
   val numScheds : Int,
   val importScheds : Boolean,
@@ -273,7 +275,8 @@ class ConfigRand(
   schedCoeffsMax,
   schedCoeffsExpectationValue,
   scheduleEquivalenceRelation,
-  schedCoeffsAbsMax) {
+  schedCoeffsAbsMax,
+  expectPrevectorization) {
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
     sb.append(super.toString())

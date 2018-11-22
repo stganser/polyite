@@ -23,6 +23,9 @@ import polyite.schedule.DomainCoeffInfo
 import polyite.schedule.Schedule
 import polyite.schedule.schedule_tree.ScheduleTreeConstruction
 import polyite.util.Util
+import polyite.schedule.schedule_tree.ScheduleNode
+import polyite.schedule.schedule_tree.FixCoincidenceForStripminingVisitor
+import polyite.schedule.schedule_tree.util.SchedTreeUtil
 
 /**
   * Provides functions for exporting sets of schedules together with evaluation
@@ -122,11 +125,13 @@ object ScheduleExport {
     sortSchedules(population).map((t : (Schedule, Fitness)) => {
       val s : Schedule = t._1
       val schedMap : isl.UnionMap = s.getSchedule
-      val schedTree : isl.Schedule = ScheduleTreeConstruction
-        .islUnionMap2IslScheduleTree(schedMap, domInfo, scop, deps, conf)
+      var schedTree : ScheduleNode = ScheduleTreeConstruction.islUnionMap2ScheduleTree(schedMap, domInfo, scop, deps, conf)
+      if (conf.expectPrevectorization)
+        schedTree = schedTree.accept(FixCoincidenceForStripminingVisitor)
+      val islSchedTree : isl.Schedule = SchedTreeUtil.scheduleTree2IslScheduleTree(schedTree)
       val f : File = new File(populationDir, jscopFileNamePrefix + "." + schedIdx)
       try {
-        JSCOPInterface.exportScheduleExt(f, scop, schedMap, schedTree)
+        JSCOPInterface.exportScheduleExt(f, scop, schedMap, islSchedTree)
       } catch {
         case e : IOException => {
           val ex : StorageException = new StorageException(

@@ -333,6 +333,7 @@ object ConfigGA {
       basicConf.schedCoeffsExpectationValue,
       basicConf.scheduleEquivalenceRelation,
       basicConf.schedCoeffsAbsMax,
+      basicConf.expectPrevectorization,
 
       probabilityToMutateSchedRow.get,
       probabilityToMutateGeneratorCoeff.get,
@@ -434,6 +435,7 @@ class ConfigGA(
   schedCoeffsExpectationValue : Option[Double],
   scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
   schedCoeffsAbsMax : Option[Int],
+  expectPrevectorization : Boolean,
 
   val probabilityToMutateSchedRow : Double,
   val probabilityToMutateGeneratorCoeff : Double,
@@ -530,7 +532,8 @@ class ConfigGA(
   schedCoeffsMax,
   schedCoeffsExpectationValue,
   scheduleEquivalenceRelation,
-  schedCoeffsAbsMax) {
+  schedCoeffsAbsMax,
+  expectPrevectorization) {
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder

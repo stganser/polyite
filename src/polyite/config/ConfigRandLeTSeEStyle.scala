@@ -121,6 +121,7 @@ object ConfigRandLeTSeEStyle {
       None,
       basicConf.scheduleEquivalenceRelation,
       None,
+      basicConf.expectPrevectorization,
 
       basicConf.numScheds,
       basicConf.importScheds,
@@ -207,6 +208,7 @@ class ConfigRandLeTSeEStyle(
   schedCoeffsExpectationValue : Option[Double],
   scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
   schedCoeffsAbsMax : Option[Int],
+  expectPrevectorization : Boolean,
 
   numScheds : Int,
   importScheds : Boolean,
@@ -289,6 +291,7 @@ class ConfigRandLeTSeEStyle(
   schedCoeffsExpectationValue,
   scheduleEquivalenceRelation,
   schedCoeffsAbsMax,
+  expectPrevectorization,
 
   numScheds,
   importScheds,

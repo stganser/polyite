@@ -23,6 +23,7 @@ import polyite.schedule.schedule_tree.ScheduleTreeConstruction
 import polyite.util.Util
 import polyite.schedule.schedule_tree.ScheduleNode
 import polyite.schedule.schedule_tree.util.SchedTreeUtil
+import polyite.schedule.schedule_tree.FixCoincidenceForStripminingVisitor
 
 /**
   * This abstract fitness evaluation strategy relies on benchmarking of schedules. It interacts with a utility binary
@@ -328,10 +329,12 @@ trait AbstractScheduleEvaluation extends AbstractFitnessEvaluation {
     val logPrefix : String = "(benchmarking worker #" + workerId + ")"
     myLogger.info(logPrefix + "benchmarking schedule: " + s)
 
-    val schedTree : ScheduleNode = ScheduleTreeConstruction
+    var schedTree : ScheduleNode = ScheduleTreeConstruction
       .islUnionMap2ScheduleTree(s.getSchedule, s.domInfo,
         scop, s.deps, conf)
 
+    if (conf.expectPrevectorization)
+      schedTree = schedTree.accept(FixCoincidenceForStripminingVisitor)
     System.gc()
 
     val fitnessCached : Option[Fitness] = checkEvalResultCache(schedTree)
@@ -533,7 +536,7 @@ trait AbstractScheduleEvaluation extends AbstractFitnessEvaluation {
     }
 
     result = result.setCompletelyEvaluated(true)
-    
+
     val res : Fitness = EvalResultOnly(result)
     benchmarkingResult.offer((s, res))
     addToEvalResultCache(res, schedTree)

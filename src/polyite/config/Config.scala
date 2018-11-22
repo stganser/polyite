@@ -140,7 +140,8 @@ object Config {
       conf.schedCoeffsMax,
       conf.schedCoeffsExpectationValue,
       conf.scheduleEquivalenceRelation,
-      conf.schedCoeffsAbsMax))
+      conf.schedCoeffsAbsMax,
+      conf.expectPrevectorization))
   }
 }
 
@@ -217,7 +218,8 @@ class Config(
   schedCoeffsMax : Option[Int],
   schedCoeffsExpectationValue : Option[Double],
   scheduleEquivalenceRelation : MinimalConfig.ScheduleEquivalenceRelation.Value,
-  schedCoeffsAbsMax : Option[Int]) extends MinimalConfig(
+  schedCoeffsAbsMax : Option[Int],
+  expectPrevectorization : Boolean) extends MinimalConfig(
   numMeasurementThreads,
   rayCoeffsRange,
   lineCoeffsRange,
@@ -283,7 +285,8 @@ class Config(
   schedCoeffsMax,
   schedCoeffsExpectationValue,
   scheduleEquivalenceRelation,
-  schedCoeffsAbsMax) {
+  schedCoeffsAbsMax,
+  expectPrevectorization) {
 
   override def toString() : String = {
     val sb : StringBuilder = StringBuilder.newBuilder
