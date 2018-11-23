@@ -176,7 +176,7 @@
   [https://www.open-mpi.org/faq/?category=java#java_build](https://www.open-mpi.org/faq/?category=java#java_build) to build the bindings. Copy the file
   `mpi.jar` to `${POLYITE_ROOT}/libs`. Polyite works with OpenMPI version 2.1.1.
 
-  3. Import the projects polyite and scala-isl-utils in Scala IDE/ Eclipse and build everything. Make sure that the libraries in `${POLYITE_ROOT}/libs` are in your build path, as well as `${ISL_UTILS_BASE_DIR}/libs/isl-scala.jar`. Make sure, that your Scala compiler assumes Scala version 2.11. Make chernikova and scala-isl-utils depend on the downloaded Scala version as well and make chernikova depend on scala-isl-utils.
+  3. Import the projects polyite and scala-isl-utils in Scala IDE/ Eclipse and build everything. Make sure that the libraries in `${POLYITE_ROOT}/libs` are in your build path, as well as `${ISL_UTILS_ROOT}/libs/isl-scala.jar`. Make sure, that your Scala compiler assumes Scala version 2.11. Make chernikova and scala-isl-utils depend on the downloaded Scala version as well and make chernikova depend on scala-isl-utils.
 
   4. To use Polyite, one must execute one of the following scripts, depending on
     the desired execution mode. The scripts assume that you have OpenJDK 8
@@ -191,7 +191,7 @@
     preparation.
 
     In each of the scripts, set
-    * `ISL_UTILS_LOC` to the value of `${ISL_UTILS_PATH}`
+    * `ISL_UTILS_LOC` to the value of `${ISL_UTILS_ROOT}`
     * `POLYITE_LOC` to the value of `${POLYITE_ROOT}`
     * `CHERNIKOVA_LOC` to the value of `${CHERNIKOVA_ROOT}`
 
