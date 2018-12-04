@@ -118,7 +118,7 @@ object SchedTreeUtil {
   }
 
   /**
-    * Until version 3.9.1 a band node is tiled by Polly iff its child is a leaf node. Since version 4 a band node is also
+    * Until version 4 a band node is tiled by Polly iff its child is a leaf node. Since version 5 a band node is also
     * tiled if its child is a sequence node with only leafs as its children. This resembles fusion of the innermost loops.
     */
   def isTiledByPolly(t : BandNode, pollyVersionGeq4 : Boolean) : Boolean = {
