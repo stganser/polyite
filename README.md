@@ -267,7 +267,7 @@
   Now, you can run schedule optimization with the genetic algorithm:
   ```bash
   cd ${POLYITE_ROOT}
-  ./run_genetic_opt_openjdk polybench-c-4.1/gemm/kernel_gemm___%entry.split---%for.end40.jscop polybench-c-4.1/gemm/config_ga_gemm_kernel_gemm_%entry.split---%for.end40.properties
+  ./run_genetic_opt polybench-c-4.1/gemm/kernel_gemm___%entry.split---%for.end40.jscop polybench-c-4.1/gemm/config_ga_gemm_kernel_gemm_%entry.split---%for.end40.properties
   ```
   Depending on your configuration, this produces one JSON file per generation of
   the genetic algorithm, one CSV file and a directory containing one JSCOP file
