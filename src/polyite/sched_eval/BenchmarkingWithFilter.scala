@@ -52,7 +52,12 @@ object BenchmarkingWithFilter extends AbstractScheduleEvaluation {
 
     classificationResult.filter((t : (Schedule, Fitness)) => scheds2Evaluate.contains(t._1)).map(_._1).foreach(schedsNot2Evaluate.add)
 
-    while (scheds2Evaluate.size < scheds2Evaluate.size / 2 && !schedsNot2Evaluate.isEmpty) {
+    val nBenchmarkedInAlreadyEval : Int = alreadyEvaluated.count(t => {
+      val bRes : Option[EvalResult] = t._2.getEvalResult
+      bRes.isDefined && (conf.measureParExecTime && bRes.get.executionMeasureRuntimeParSuccessful.getOrElse(false)) || (bRes.get.executionMeasureRuntimeSeqSuccessful.getOrElse(false))
+    })
+
+    while (scheds2Evaluate.size + nBenchmarkedInAlreadyEval < pairs.size && !schedsNot2Evaluate.isEmpty) {
       val schedsNot2EvalSeq : Array[Schedule] = schedsNot2Evaluate.toArray
       val randSched : Schedule = schedsNot2EvalSeq(Random.nextInt(schedsNot2EvalSeq.size))
       scheds2Evaluate.add(randSched)
