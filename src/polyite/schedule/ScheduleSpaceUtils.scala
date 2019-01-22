@@ -311,7 +311,10 @@ object ScheduleSpaceUtils {
      */
     val tmpCtx : isl.Ctx = Isl.initCtx()
     try {
-      return constructScheduleSpaceHelp(tmpCtx, partialSched, deps2CarryStrongly, preparePolyhedra, conf)
+      val res = constructScheduleSpaceHelp(tmpCtx, partialSched, deps2CarryStrongly, preparePolyhedra, conf)
+      tmpCtx.resetOperations()
+      tmpCtx.setMaxOperations(0)
+      return res
     } catch {
       case e : IslException => {
         //        tmpCtx.resetError()
