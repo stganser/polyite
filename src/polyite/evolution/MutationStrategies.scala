@@ -141,40 +141,44 @@ object MutationStrategies {
     if (numDims2Replace >= s.numDims)
       numDims2Replace -= 1
 
+    val tmpCtx : isl.Ctx = Isl.initCtx()
+    val sTmpCtx : Schedule = s.transferToCtx(tmpCtx)
+
     /*
      * replacePrefix degenerates to a full replacement of the schedule if
      * deps2CarryStrongly = s.deps!
      */
-    val deps2CarryStrongly : Set[Dependence] = s.getDependencesCarriedUpToDim(numDims2Replace - 1)
+    val deps2CarryStrongly : Set[Dependence] = sTmpCtx.getDependencesCarriedUpToDim(numDims2Replace - 1)
     val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
 
     val newSched : Schedule =
       if (deps2CarryStrongly.isEmpty) {
         val prefixLength : Int = Random.nextInt(numDims2Replace + 1)
         val polyhedra : ListBuffer[Polyhedron] = ListBuffer.empty
-        var uncarriedDeps : Set[Dependence] = s.deps
+        var uncarriedDeps : Set[Dependence] = sTmpCtx.deps
         for (i : Int <- 0 until prefixLength) {
-          val coeffSpace : isl.Set = ScheduleSpaceUtils.calculateCoeffSpace(s.domInfo, uncarriedDeps, false)
+          val coeffSpace : isl.Set = ScheduleSpaceUtils.calculateCoeffSpace(sTmpCtx.domInfo, uncarriedDeps, false)
           polyhedra.append(sampler.preparePolyhedron(coeffSpace, conf))
-          uncarriedDeps = uncarriedDeps.filterNot(ScheduleSpaceUtils.checkCarried(s.domInfo, coeffSpace))
+          uncarriedDeps = uncarriedDeps.filterNot(ScheduleSpaceUtils.checkCarried(sTmpCtx.domInfo, coeffSpace))
         }
-        val tmp : Schedule = new Schedule(s.domInfo, s.deps)
+        val tmp : Schedule = new Schedule(sTmpCtx.domInfo, sTmpCtx.deps)
         for (p : Polyhedron <- polyhedra) {
-          val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = sampler.sampleCoeffVect(p, s.domInfo, conf,
+          val (coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) = sampler.sampleCoeffVect(p, sTmpCtx.domInfo, conf,
             samplerParams)
           tmp.addScheduleVector(coeffs, schedSummands)
         }
         tmp
       } else {
-        ScheduleUtils.completeSchedule(new Schedule(s.domInfo, s.deps), conf.maxNumRays, conf.maxNumLines,
+        ScheduleUtils.completeSchedule(new Schedule(sTmpCtx.domInfo, sTmpCtx.deps), conf.maxNumRays, conf.maxNumLines,
           conf, 1, deps2CarryStrongly, sampler).head
       }
 
-    for (i <- numDims2Replace until s.numDims)
-      newSched.addForeignDim(s, i)
+    for (i <- numDims2Replace until sTmpCtx.numDims)
+      newSched.addForeignDim(sTmpCtx, i)
     val newSchedSimplified : Schedule = ScheduleUtils.simplify(newSched)
-    return Some(ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSchedSimplified,
-      ScheduleUtils.generateLinIndepScheduleVector))
+    val res = ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSchedSimplified,
+      ScheduleUtils.generateLinIndepScheduleVector)
+    return Some(res.transferToCtx(s.domInfo.ctx))
   }
 
   //  private def annealMutationProbability(generation: Int, originalProbability: Double): Double =
@@ -277,7 +281,8 @@ object MutationStrategies {
       ScheduleUtils.generateLinIndepScheduleVector))
   }
 
-  private def mutateVertexSummands(conf : ConfigGA,
+  private def mutateVertexSummands(
+    conf : ConfigGA,
     schedSummandsNew : HashSet[ScheduleSummand],
     vertexSummands : ArrayBuffer[VertexSummand], p : Double) {
 
@@ -310,7 +315,8 @@ object MutationStrategies {
     vertexSummands map { (s : ScheduleSummand) => schedSummandsNew.add(s) }
   }
 
-  private def mutateRaySummands(conf : ConfigGA,
+  private def mutateRaySummands(
+    conf : ConfigGA,
     schedSummandsNew : HashSet[ScheduleSummand],
     raySummands : ArrayBuffer[RaySummand], p : Double) {
 
@@ -325,7 +331,8 @@ object MutationStrategies {
     }
   }
 
-  private def mutateLineSummands(conf : ConfigGA,
+  private def mutateLineSummands(
+    conf : ConfigGA,
     schedSummandsNew : HashSet[ScheduleSummand],
     lineSummands : ArrayBuffer[LineSummand], p : Double) {
 
