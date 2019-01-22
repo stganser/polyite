@@ -23,7 +23,7 @@ trait SamplingStrategy {
     * polyhedra that are represented by linearly affine constraints. Sampling strategies may use this method to
     * convert polyhedra to the representation that they use and deliver an according implementation of {@code Polyhedron}.
     *
-    * @param p the polyhedron to translate
+    * @param p the polyhedron to translate. Note, that {@code p} may be connected to a different isl context than Polyite's global one.
     * @param conf Polyite configuration.
     */
   def preparePolyhedron(p : isl.Set, conf : Config) : Polyhedron
@@ -35,7 +35,7 @@ trait SamplingStrategy {
     * {@code SamplingStrategyParams.sampleCoeffVect(Polyhedron, DomainCoeffInfo, Config, SamplingStrategyParams)} whenever
     * it is being called to sample a schedule coefficient vector from one of the polyhedra in {@code region}.
     * @param region the search space region to analyze in the representation that resulted from calling {@code SamplingStrategy.preparePolyhedron(Set, Config)}
-    * for each polyhedron in the region's representation.
+    * for each polyhedron in the region's representation.  Note, that the polyhedra in {@code region} may be connected to a different isl context than Polyite's global one.
     * @param conf Polyite configuration
     * @param numRaysLimit parameter that is particularly related to Chernikova sampling.
     * {@code numRaysLimit} is the maximum number of rays that may have a coefficient unequal to zero in the linear combination
@@ -57,7 +57,8 @@ trait SamplingStrategy {
   /**
    * Sample a schedule coefficient vector from {@code p}. The polyhedron is represented in the format created by
    * {@code SamplingStrategy.preparePolyhedron(Set, Config)}.
-   * @param p polyhedron in the format created by {@code SamplingStrategy.preparePolyhedron(Set, Config)}.
+   * @param p polyhedron in the format created by {@code SamplingStrategy.preparePolyhedron(Set, Config)}. Note, that
+   * {@code p} may be connected to a different isl context than Polyite's global one.
    * @param domInfo description of the schedule coefficient vector space
    * @param conf Polyite configuration
    * @param params result of search space region inspection by {@code SampligStrategy.prepareSamplingStrategyParams(Iterable[Polyhedron], Config, NumGeneratorsLimit, NumGeneratorsLimit)}.
