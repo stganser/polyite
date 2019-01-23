@@ -31,6 +31,7 @@ import polyite.schedule.sampling.RaySummand
 import polyite.schedule.sampling.LineSummand
 import polyite.schedule.sampling.SamplingStrategy
 import polyite.schedule.sampling.SamplingStrategyParams
+import polyite.config.Config
 
 /**
   * Schedule mutation strategies.
@@ -106,6 +107,44 @@ object MutationStrategies {
     } else {
       return ScheduleUtils.generateLinIndepScheduleVector1(s, dim, sampler, samplerParams, conf)
     }
+  }
+
+  /**
+    * Replaces a block of dimensions in the given schedule. Simulated annealing controls the block size. At smallest
+    * possible block size is two, in order to avoid convergence to dimension replacement.
+    */
+  def replaceBlocksOfDims(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
+    val tmpCtx : isl.Ctx = Isl.initCtx()
+    val schedTmp : Schedule = s.transferToCtx(tmpCtx)
+    var blockSize : Int = (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
+    if (blockSize >= s.numDims)
+      blockSize -= 1
+    if (blockSize <= 1 && s.numDims > 1)
+      blockSize = 2
+    val fstDimIndex = Random.nextInt(s.numDims - blockSize + 1)
+
+    val newSched : Schedule = new Schedule(schedTmp.domInfo, schedTmp.deps)
+
+    for (d : Int <- 0 until fstDimIndex) {
+      newSched.addForeignDim(schedTmp, d)
+    }
+    val deps2WeaklySolve : Set[Dependence] = schedTmp.deps -- (schedTmp.getDependencesCarriedUpToDim(fstDimIndex - 1))
+    var deps2Carry : Set[Dependence] = Set.empty
+    for (d : Int <- fstDimIndex until fstDimIndex + blockSize)
+      deps2Carry ++= schedTmp.getDepsNewlyCarriedBy(d)
+    val preparePolyhedron = (p : isl.Set, conf : Config) => sampler.preparePolyhedron(p, conf)
+    val searchSpace : Iterable[Polyhedron] = ScheduleSpaceUtils.constructScheduleSpace(newSched, deps2Carry, preparePolyhedron, conf)
+    val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
+
+    for (p : Polyhedron <- searchSpace) {
+      val (coeffs, schedSummands) = sampler.sampleCoeffVect(p, newSched.domInfo, conf, samplerParams)
+      newSched.addScheduleVector(coeffs, schedSummands)
+    }
+    for (d <- fstDimIndex + blockSize until schedTmp.numDims) {
+      newSched.addForeignDim(schedTmp, d)
+    }
+    val schedCompleted : Schedule = ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSched, ScheduleUtils.generateLinIndepScheduleVector)
+    return Some(schedCompleted.transferToCtx(s.domInfo.ctx))
   }
 
   /**

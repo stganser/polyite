@@ -21,6 +21,7 @@ object GeneticOperatorFactory {
     val MutateGeneratorCoeffs = Value("mutateGeneratorCoeffs")
     val GeometricCrossover = Value("geometricCrossover")
     val RowCrossover = Value("rowCrossover")
+    val ReplaceBlocksOfDims = Value("replaceBlocksOfDims")
 
     /**
       * Check, whether the given operator is a mutator.
@@ -34,7 +35,8 @@ object GeneticOperatorFactory {
     (GeneticOperators.ReplaceDims, MutationStrategies.replaceDims),
     (GeneticOperators.ReplacePrefix, MutationStrategies.replacePrefix),
     (GeneticOperators.ReplaceSuffix, MutationStrategies.replaceSuffix),
-    (GeneticOperators.MutateGeneratorCoeffs, MutationStrategies.mutateGeneratorCoeffs))
+    (GeneticOperators.MutateGeneratorCoeffs, MutationStrategies.mutateGeneratorCoeffs),
+    (GeneticOperators.ReplaceBlocksOfDims, MutationStrategies.replaceBlocksOfDims))
 
   private val crossoverStrategies : Map[GeneticOperators.Value, (ConfigGA, ScopInfo, SamplingStrategy) => ((Schedule, Schedule) => HashSet[Schedule])] = Map(
     (GeneticOperators.GeometricCrossover, CrossoverStrategies.geometricCrossover),

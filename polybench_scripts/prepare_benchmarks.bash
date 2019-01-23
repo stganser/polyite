@@ -108,6 +108,7 @@ function writeGAConfig {
     echo "replaceSuffixEnabled=true" >> ${output}
     echo "mutateGeneratorCoeffsEnabled=true" >> ${output}
     echo "geometricCrossoverEnabled=true" >> ${output}
+    echo "replaceBlocksOfDimsEnabled=true" >> ${output}
     echo "rowCrossoverEnabled=true" >> ${output}
     echo "initPopulationNumLines=2" >> ${output}
     echo "initPopulationNumRays=2" >> ${output}
