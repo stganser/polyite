@@ -21,8 +21,8 @@ function getKernelFuncName {
 
 function extractRegionBoundaries {
     local regionStr=$1
-    regionEntryPoint=`echo "${region}" | sed -r 's/^%//g' | sed -r 's/---.*$//g'`
-    regionExitPoint=`echo "${region}" | sed 's/^.*---%//g'`
+    regionEntryPoint=`echo "${regionStr}" | sed -r 's/^%//g' | sed -r 's/---.*$//g'`
+    regionExitPoint=`echo "${regionStr}" | sed 's/^.*---%//g'`
 }
 
 function getRegionList {
