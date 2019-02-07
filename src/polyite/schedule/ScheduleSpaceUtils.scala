@@ -603,7 +603,7 @@ object ScheduleSpaceUtils {
     for (i <- 0 until depA.length) {
       var nInterf : Int = 0
       for (j <- 0 until depA.length)
-        if (i != j && !checkInterference(depA(i), depA(j), initBoundingBox))
+        if (i != j && checkInterference(depA(i), depA(j), initBoundingBox))
           nInterf += 1
       result.put(depA(i), nInterf)
       System.gc()
@@ -845,7 +845,7 @@ object ScheduleSpaceUtils {
     val projection : isl.Set = Isl.islSetProjectOntoDim(polytope, d)
     val min : Long = projection.lexmin().samplePoint().getCoordinateVal(T_SET, 0).getNumSi
     val max : Long = projection.lexmax().samplePoint().getCoordinateVal(T_SET, 0).getNumSi
-    return max - min
+    return max - min + 1
   }
 
   private def calcTrafficSizeOfDep(dep : isl.Map, srcAccessLocs : Set[String],
