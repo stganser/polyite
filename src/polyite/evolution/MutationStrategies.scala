@@ -45,7 +45,6 @@ object MutationStrategies {
     * growing values of {@code generation} (simulated annealing).
     */
   def replaceDims(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
-    myLogger.info("Applying replaceDims.")
     val tmpCtx : isl.Ctx = Isl.initCtx()
     val sTmpCtx : Schedule = s.transferToCtx(tmpCtx)
     val currProbabilityToMutateSchedRow : Double = annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow)
