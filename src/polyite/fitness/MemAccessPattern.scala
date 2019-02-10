@@ -41,7 +41,7 @@ object MemAccessPattern extends Feature {
     var nFiltered : Int = 0
     val memAccessesForward : List[Boolean] = (
       for (
-        stmt : String <- stmts;
+        stmt : String <- stmts.toList;
         val stmtDomain : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(scop.getDomain, Set(stmt)));
         val stmtSched : isl.UnionMap = getStmtLoopSched(t, stmt) if (!stmtSched.isEmpty() && stmtDomain.dim(T_SET) > 0)
       ) yield {
@@ -120,4 +120,6 @@ object MemAccessPattern extends Feature {
   def isMultiStmt() : Boolean = false
 
   override def toString() : String = getClass.getSimpleName
+
+  override def getDisplayName() : String = "memory access pattern"
 }
