@@ -64,4 +64,44 @@ class TestParallelLoops extends AbstractTest {
     println("inner parallel: " + fVal)
     assertEquals(1, fVal, 0)
   }
+  
+  @Test
+  def testWithSeqOneInnerPar() {
+    val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i <= n and 0 <= j <= n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [i, 0, j] }"))
+      .addWrs(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i,j] -> A[i, j] }"))
+      .addRds(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i,j] -> A[i - 1, j] }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { T[i, j] : 0 <=i <= n and 0 <= j <= n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i, j] -> [i, 1, j] }"))
+      .addWrs(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i,j] -> B[i, j] }"))
+      .addRds(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i,j] -> B[i, j - 1] }"))
+    val (deps : Set[Dependence], domInfo : DomainCoeffInfo) = ScheduleSpaceUtils.calcDepsAndDomInfo(scop)
+    val sched : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(scop.getSched, domInfo, scop, deps, false, true), deps))
+    val scopMetrics : SCoPMetrics = SCoPMetrics.apply(deps.size, 2, 0, 1, 2)
+    val fVal :Double = ParallelLoops.calc(sched, super.createTestConfig().get, scop, scopMetrics, domInfo, deps)
+    println(sched)
+    println("with seq, one inner par: " + fVal)
+    assertEquals(0.25, fVal, 0)
+  }
+  
+  @Test
+  def testWithSeqTwoInnerPar() {
+    val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i <= n and 0 <= j <= n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [i, 0, j] }"))
+      .addWrs(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i,j] -> A[i, j] }"))
+      .addRds(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i,j] -> A[i - 1, j] }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { T[i, j] : 0 <=i <= n and 0 <= j <= n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i, j] -> [i, 1, j] }"))
+      .addWrs(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i,j] -> B[i] }"))
+      .addRds(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i,j] -> B[i] }"))
+    val (deps : Set[Dependence], domInfo : DomainCoeffInfo) = ScheduleSpaceUtils.calcDepsAndDomInfo(scop)
+    val sched : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(scop.getSched, domInfo, scop, deps, false, true), deps))
+    val scopMetrics : SCoPMetrics = SCoPMetrics.apply(deps.size, 2, 0, 1, 2)
+    val fVal :Double = ParallelLoops.calc(sched, super.createTestConfig().get, scop, scopMetrics, domInfo, deps)
+    println(sched)
+    println("with seq, two inner par: " + fVal)
+    assertEquals(0.25, fVal, 0)
+  }
 }
