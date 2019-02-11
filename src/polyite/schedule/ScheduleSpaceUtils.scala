@@ -816,7 +816,7 @@ object ScheduleSpaceUtils {
 
     return (for (aDim <- 0 until nArrayDims) yield {
       val dimSize : Long = accessedArrayParts.map(getSizeOfDim(_, aDim)).max
-      val subscriptMatrix : Array[Array[Rat]] = buildSubscriptMatrix(accessRelations, aDim)
+      val subscriptMatrix : Array[Array[Rat]] = buildSubscriptMatrix(accessRelations.toList, aDim)
       val subscriptMatrixRank : Int = if (subscriptMatrix.isEmpty)
         0
       else Util.calcRowRank(Util.calcRowEchelonForm(subscriptMatrix, subscriptMatrix.size, subscriptMatrix(0).size))
@@ -824,7 +824,7 @@ object ScheduleSpaceUtils {
     }).sum
   }
 
-  private def buildSubscriptMatrix(accessRelations : Iterable[isl.Map], arrayDim : Int) : Array[Array[Rat]] = {
+  private def buildSubscriptMatrix(accessRelations : List[isl.Map], arrayDim : Int) : Array[Array[Rat]] = {
     return accessRelations.map((rels : isl.Map) => {
       var rows : List[Array[Rat]] = List.empty
       rels.foreachBasicMap((rel : isl.BasicMap) => {
