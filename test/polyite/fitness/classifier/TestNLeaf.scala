@@ -94,4 +94,41 @@ class TestNLeaf extends AbstractTest {
     println("two seq: " + fVal)
     assertEquals(1.0, fVal, 0)
   }
+  
+  @Test
+  def testThreeLeave() {
+    val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { R[i, j] : 0 <=i < n and 0 <= j < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i < n and 0 <= j < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { T[i, j] : 0 <=i < n and 0 <= j < n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { R[i, j] -> [3*i + 1, j] }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [3*i + 2, j] }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i, j] -> [3*i + 3, j] }"))
+    val (deps : Set[Dependence], domInfo : DomainCoeffInfo) = ScheduleSpaceUtils.calcDepsAndDomInfo(scop)
+    val sched : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(scop.getSched, domInfo, scop, deps, false, true), deps))
+    val scopMetrics : SCoPMetrics = SCoPMetrics.apply(deps.size, 3, 0, 1, 2)
+    val fVal :Double = NumLeafs.calc(sched, super.createTestConfig().get, scop, scopMetrics, domInfo, deps)
+    println(sched)
+    println("three leaves: " + fVal)
+    assertEquals(1.0, fVal, 0)
+  }
+  
+  @Test
+  def testThreeLeave1() {
+    val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { R[i, j] : 0 <=i < n and 0 <= j < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i < n and 0 <= j < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { T[i, j] : 0 <=i < n and 0 <= j < n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { R[i, j] -> [3*i + 1 + 3*j, j] }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [3*i + 2 + 3*j, j] }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[i, j] -> [3*i + 3 + 3*j, j] }"))
+    val (deps : Set[Dependence], domInfo : DomainCoeffInfo) = ScheduleSpaceUtils.calcDepsAndDomInfo(scop)
+    val sched : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(scop.getSched, domInfo, scop, deps, false, true), deps))
+    println(SchedTreeUtil.scheduleTree2IslScheduleTree(sched))
+    val scopMetrics : SCoPMetrics = SCoPMetrics.apply(deps.size, 3, 0, 1, 2)
+    val fVal :Double = NumLeafs.calc(sched, super.createTestConfig().get, scop, scopMetrics, domInfo, deps)
+    println(sched)
+    println("three leaves 1: " + fVal)
+    assertEquals(1.0, fVal, 0)
+  }
 }
