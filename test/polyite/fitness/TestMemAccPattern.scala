@@ -33,6 +33,22 @@ class TestMemAccPattern {
   }
 
   @Test
+  def testAllZeroDimStmt() {
+    val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i <= n and 0 <= j <= n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { T[] : }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [0, i, j] }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[] -> [1, 0, 0] }"))
+      .addWrs(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[] -> B[] }"))
+      .addRds(isl.Map.readFromStr(Isl.ctx, "[n] -> { T[] -> B[] }"))
+    val (deps : Set[Dependence], domInfo : DomainCoeffInfo) = ScheduleSpaceUtils.calcDepsAndDomInfo(scop)
+    val sched : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(scop.getSched, domInfo, scop, deps, false, true), deps))
+    val fVal : Double = MemAccessPattern.calc(sched, null, scop, null, domInfo, deps)
+    println("all with zero dim statement: " + fVal)
+    assertEquals(1.0, fVal, 0)
+  }
+
+  @Test
   def testAllDiagonal() {
     val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
       .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i <= n and 0 <= j <= n }"))
