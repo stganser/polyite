@@ -35,7 +35,7 @@ abstract class AbstractDataLocality(calcDepWeight : (Iterable[Dependence], ScopI
       if (dep2Volume == null)
         dep2Volume = calcDepWeight(deps, scop, conf)
     }
-    val inputDep2Volume : Map[Dependence, Long] = calcDepWeight(inputDeps, scop, conf).filter(d => !(dep2Volume.exists(t => t._1.map.isEqual(d._1.map))))
+    val inputDep2Volume : Map[Dependence, Long] = calcDepWeight(inputDeps, scop, conf).filter(d => dep2VolumeLck.synchronized {!(dep2Volume.exists(t => t._1.map.isEqual(d._1.map)))})
 
     val depsWithVolume : List[(Dependence, Long)] = dep2VolumeLck.synchronized {dep2Volume.toSet ++ inputDep2Volume.toSet } toList
     val maxVolume : Long = depsWithVolume.map(_._2).max
