@@ -873,6 +873,7 @@ object ScheduleSpaceUtils {
             for (s1 : isl.Set <- destAccessed) {
               var accessedByBoth : isl.Set = Isl.simplify(s0.intersect(s1))
               if (!accessedByBoth.isEmpty()) {
+                
                 val nParam = accessedByBoth.getSpace.dim(T_PAR)
                 for (i <- 0 until nParam) {
                   val dimName : String = accessedByBoth.getDimName(T_PAR, i)

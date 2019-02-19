@@ -26,12 +26,25 @@ class TestMemAccPattern {
     println("all: " + fVal)
     assertEquals(1.0, fVal, 0)
     val sched1 : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [j, i] }"), domInfo, scop, deps, false, true), deps))
-
     val fVal1 : Double = MemAccessPattern.calc(sched1, null, scop, null, domInfo, deps)
     println("all interchanged: " + fVal1)
     assertEquals(0.0, fVal1, 0)
   }
-
+  
+  @Test
+  def testNegative() {
+    val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
+      .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { S[i, j] : 0 <=i <= n and 0 <= j <= n }"))
+      .addSchedule(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i, j] -> [i, j] }"))
+      .addWrs(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i,j] -> A[i, -j] }"))
+      .addRds(isl.Map.readFromStr(Isl.ctx, "[n] -> { S[i,j] -> A[i, -j] }"))
+    val (deps : Set[Dependence], domInfo : DomainCoeffInfo) = ScheduleSpaceUtils.calcDepsAndDomInfo(scop)
+    val sched : ScheduleNode = SchedTreeUtil.markLoops(SchedTreeUtil.simplifySchedTree(ScheduleTreeConstruction.islUnionMap2BasicScheduleTree(scop.getSched, domInfo, scop, deps, false, true), deps))
+    val fVal : Double = MemAccessPattern.calc(sched, null, scop, null, domInfo, deps)
+    println("negative: " + fVal)
+    assertEquals(0.0, fVal, 0)
+  }
+  
   @Test
   def testAllZeroDimStmt() {
     val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
@@ -168,7 +181,6 @@ class TestMemAccPattern {
     assertEquals(0.0, fVal, 0)
   }
 
-  @Test
   def testWithSeqNodes() {
     val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
       .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { R[i, j] : 0 <=i <= n and 0 <= j <= n }"))
@@ -190,7 +202,6 @@ class TestMemAccPattern {
     assertEquals(0.5, fVal, 0)
   }
 
-  @Test
   def testWithSeqNodes1() {
     val scop : ScopInfo = new ScopInfo().setParams(isl.Set.readFromStr(Isl.ctx, "[n] -> { : 0 < n }"))
       .addDomain(isl.Set.readFromStr(Isl.ctx, "[n] -> { R[i, j] : 0 <=i <= n and 0 <= j <= n }"))
