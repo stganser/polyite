@@ -898,7 +898,6 @@ object ScheduleSpaceUtils {
     if (s.isEmpty())
       return 0
 
-    Isl.islSetCountNPoints(conf.barvinokBinary, conf.barvinokLibraryPath, s).max().getNumSi
     val poly : isl.PwQpolynomial = Isl.islSetCountNPoints(conf.barvinokBinary, conf.barvinokLibraryPath, s)
     val max : isl.Val = poly.max()
     //    if (max.isNeginfty() || max.isInfty()) {
