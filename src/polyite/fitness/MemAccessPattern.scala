@@ -42,7 +42,7 @@ object MemAccessPattern extends Feature {
       for (
         stmt : String <- stmts.toList;
         val stmtDomain : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(scop.getDomain, Set(stmt)));
-        if (stmtDomain.dim(T_SET) > 0)
+        if (stmtDomain.dim(T_SET) > 0 && !stmtDomain.isSingleton())
       ) yield {
         val stmtSched : isl.Map = isl.Map.fromUnionMap(getStmtLoopSched(t, stmt))
         val stmtAccessesStmt : List[isl.BasicMap] = memAccesses.filter(_.getTupleName(T_IN) == stmt)
