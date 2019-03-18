@@ -640,7 +640,7 @@ object Util {
     */
   def variance(values : Iterable[Double]) : Double = {
     val theMean : Double = mean(values)
-    return values.map(x => math.pow(x - theMean, 2)).sum * ((1 : Double) / (values.size - 1))
+    return values.toList.map(x => math.pow(x - theMean, 2)).sum * ((1 : Double) / (values.size - 1))
   }
 
   /**
