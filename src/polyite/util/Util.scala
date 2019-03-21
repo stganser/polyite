@@ -656,7 +656,7 @@ object Util {
   /**
     * Calculates the relative standard error of the given values (assuming that the values come from a normally distributed population)
     */
-  def relativeStandardError(values : Iterable[Double]) : Double = (standardDeviation(values) / math.sqrt(values.size)) / mean(values)
+  def relativeStandardError(values : Iterable[Double]) : Double = (standardDeviation(values) / math.sqrt(values.size)) / math.abs(mean(values))
 
   /**
     * Calculates the variance coefficient of the given values.
