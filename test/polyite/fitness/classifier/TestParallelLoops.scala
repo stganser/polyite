@@ -1,4 +1,4 @@
-package polyite.fitness
+package polyite.fitness.classifier
 
 import polyite.ScopInfo
 import polyite.schedule.Dependence
@@ -12,6 +12,7 @@ import polyite.schedule.schedule_tree.ScheduleTreeConstruction
 import org.junit.Test
 import polyite.util.SCoPMetrics
 import polyite.AbstractTest
+import polyite.fitness.ParallelLoops
 
 class TestParallelLoops extends AbstractTest {
 

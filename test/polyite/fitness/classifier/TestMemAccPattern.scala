@@ -1,4 +1,4 @@
-package polyite.fitness
+package polyite.fitness.classifier
 
 import polyite.ScopInfo
 import isl.Isl
@@ -10,6 +10,7 @@ import polyite.schedule.ScheduleSpaceUtils
 import org.junit.Assert._
 import org.junit.Test
 import polyite.schedule.schedule_tree.util.SchedTreeUtil
+import polyite.fitness.MemAccessPattern
 
 class TestMemAccPattern {
 
