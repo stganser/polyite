@@ -33,5 +33,6 @@ class TimerTest {
       measuredDurations(myIndex) = Timer.removeTimer(timerName)
     })
     activeDurations.map(_.sum).zip(measuredDurations).map(t => (t._1 / 1000, t._2 / 1000)).map(t => assertTrue(t._1 == t._2))
+    println(measuredDurations.mkString(", "))
   }
 }
