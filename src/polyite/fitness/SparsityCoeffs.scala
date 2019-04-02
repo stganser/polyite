@@ -55,7 +55,7 @@ private object SparsityVisitor extends ParamScheduleNodeVisitor[(Int, Int), isl.
   def visit(b : SetNode, dimT : isl.DimType) : (Int, Int) = handleInnerNode(b.getChildren, dimT)
 
   def handleInnerNode(children : Iterable[(Set[String], ScheduleNode)], dimT : isl.DimType) : (Int, Int) = {
-    children.map(_._2).foldLeft((0, 0))((t : (Int, Int), n : ScheduleNode) => {
+    children.toList.map(_._2).foldLeft((0, 0))((t : (Int, Int), n : ScheduleNode) => {
       val nRes : (Int, Int) = n.accept(this, dimT)
       (t._1 + nRes._1, t._2 + nRes._2)
     })

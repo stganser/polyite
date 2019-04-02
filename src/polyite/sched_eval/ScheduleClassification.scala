@@ -125,7 +125,8 @@ object ScheduleClassification extends AbstractFitnessEvaluation {
     val logPrefix : String = "(benchmarking worker #" + workerId + ")"
     myLogger.info(logPrefix + "benchmarking schedule: " + s)
     val fVect : FeatureVect = FeatureCalculator.calcFeatures(s.getSchedule, Some(schedTreeTiling), Some(schedTree), domInfo, scop, scopMetrics, deps, features, conf)
-    val pred : Fitness = PredictionOnly(classifiers(workerId).predict(fVect))
+    val cls : Classifier = this.synchronized { classifiers(workerId) }
+    val pred : Fitness = PredictionOnly(cls.predict(fVect))
     addToEvalResultCache(pred, schedTree, schedTreeTiling)
     benchmarkingResult.offer((s, pred))
   }

@@ -42,7 +42,7 @@ class AbstractTest {
     props.setProperty("islComputeout", "38400000")
     props.setProperty("barvinokBinary", "/home/stg/workspace/count_integer_points/count_integer_points")
     props.setProperty("barvinokLibraryPath", "/home/stg/workspace/barvinok/barvinok/install/lib")
-    props.setProperty("paramValMappings", "n=1000")
+    props.setProperty("paramValMappings", "n=10")
     props.setProperty("measureParExecTime", "true")
     props.setProperty("measureSeqExecTime", "false")
     props.setProperty("boundSchedCoeffs", "true")
@@ -69,10 +69,11 @@ class AbstractTest {
     props.setProperty("schedTreeSimplDivideCoeffsByGCD", "true")
     props.setProperty("schedTreeSimplElimSuperfluousSubTrees", "true")
     props.setProperty("schedTreeSimplElimSuperfluousDimNodes", "true")
-    props.setProperty("normalizeFeatures", "false")
+    props.setProperty("normalizeFeatures", "true")
     props.setProperty("evaluationStrategy", "CPU")
     props.setProperty("samplingStrategy", "CHERNIKOVA")
     props.setProperty("scheduleEquivalenceRelation", "RATIONAL_MATRIX_AND_GENERATORS")
+    props.setProperty("expectPrevectorization", "false")
     return Config.parseConfig(props)
   }
 }

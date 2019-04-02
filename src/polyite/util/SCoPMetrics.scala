@@ -20,7 +20,7 @@ object SCoPMetrics {
 
     val interfCount = ScheduleSpaceUtils.calcInterferenceOfDeps(deps, domInfo.universe).values.sum
 
-    val interfShare : Double = interfCount.toDouble / (deps.size * deps.size)
+    val interfShare : Double = interfCount.toDouble / (deps.size * (deps.size - 1))
 
     var maxLoopDepth : Int = 0
     scop.getSched.foreachMap((stmtSched : isl.Map) => {

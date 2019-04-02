@@ -640,7 +640,7 @@ object Util {
     */
   def variance(values : Iterable[Double]) : Double = {
     val theMean : Double = mean(values)
-    return values.map(x => math.pow(x - theMean, 2)).sum * ((1 : Double) / (values.size - 1))
+    return values.toList.map(x => math.pow(x - theMean, 2)).sum * ((1 : Double) / (values.size - 1))
   }
 
   /**
@@ -656,7 +656,7 @@ object Util {
   /**
     * Calculates the relative standard error of the given values (assuming that the values come from a normally distributed population)
     */
-  def relativeStandardError(values : Iterable[Double]) : Double = (standardDeviation(values) / math.sqrt(values.size)) / mean(values)
+  def relativeStandardError(values : Iterable[Double]) : Double = (standardDeviation(values) / math.sqrt(values.size)) / math.abs(mean(values))
 
   /**
     * Calculates the variance coefficient of the given values.

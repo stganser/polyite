@@ -37,7 +37,7 @@ private object CountLeafsVisitor extends ScheduleNodeVisitor[Int] {
 
   def visit(b : LeafNode) : Int = 1
 
-  def visit(b : SetNode) : Int = b.getChildren.map(_._2.accept(this)).sum
+  def visit(b : SetNode) : Int = b.getChildren.toList.map(_._2.accept(this)).sum
 
   def visit(b : SeqNode) : Int = b.getChildren.map(_._2.accept(this)).sum
 

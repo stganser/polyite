@@ -36,37 +36,54 @@ object MemAccessPattern extends Feature {
     deps : Set[Dependence]) : Double = {
 
     val stmts : Set[String] = Isl.islUnionSetGetTupleNames(scop.getDomain)
-    val memAccesses : List[isl.BasicMap] = (Isl.splitUnionMapNoCoalesce(scop.getRds).map(Isl.splitMapNoCoalesce(_)).flatten.toList ++
-      Isl.splitUnionMapNoCoalesce(scop.getWrs).map(Isl.splitMapNoCoalesce(_)).flatten.toList).filter(_.dim(T_OUT) > 0)
-    var nFiltered : Int = 0
+    val memAccesses : List[isl.BasicMap] = (Isl.splitUnionMapNoCoalesce(scop.getRds).map(Isl.splitMapNoCoalesce(_)).flatten ++
+      Isl.splitUnionMapNoCoalesce(scop.getWrs).map(Isl.splitMapNoCoalesce(_)).flatten).filter(_.dim(T_OUT) > 0)
     val memAccessesForward : List[Boolean] = (
       for (
-        stmt : String <- stmts;
+        stmt : String <- stmts.toList;
         val stmtDomain : isl.Set = isl.Set.fromUnionSet(Isl.islUnionSetFilter(scop.getDomain, Set(stmt)));
-        val stmtSched : isl.UnionMap = getStmtLoopSched(t, stmt) if (!stmtSched.isEmpty() && stmtDomain.dim(T_SET) > 0)
+        if (stmtDomain.dim(T_SET) > 0 && !stmtDomain.isSingleton())
       ) yield {
+        val stmtSched : isl.Map = isl.Map.fromUnionMap(getStmtLoopSched(t, stmt))
         val stmtAccessesStmt : List[isl.BasicMap] = memAccesses.filter(_.getTupleName(T_IN) == stmt)
-        val memAccessesForward : List[Boolean] = stmtAccessesStmt.map { (memAcc : isl.BasicMap) =>
+        val memAccessesForwardStmt : List[Boolean] = stmtAccessesStmt.map { (memAcc : isl.BasicMap) =>
           {
-            val memAccMapped : isl.BasicMap = Isl.islBasicMapFromMap(isl.Map.fromUnionMap(memAcc.applyDomain(stmtSched)))
-            if (memAccMapped.isSingleValued()) {
-              val lastNonConstantInputDim : Int = (0 until memAccMapped.dim(T_IN)).filterNot(Isl.isConstInputDim(memAccMapped, _)).max
-              val memAccMappedPwMAff : isl.PwMultiAff = isl.PwMultiAff.fromMap(memAccMapped)
-              val forward : Boolean = (0 until memAccMappedPwMAff.dim(T_OUT) - 1).forall((dim : Int) => {
-                val pwAff : isl.PwAff = memAccMappedPwMAff.getPwAff(dim)
-                pwAff2Aff(pwAff).getCoefficientVal(T_IN, lastNonConstantInputDim).isZero()
-              })
-              val coeffLastDim : isl.Val = pwAff2Aff(memAccMappedPwMAff.getPwAff(memAccMappedPwMAff.dim(T_OUT) - 1)).getCoefficientVal(T_IN, lastNonConstantInputDim)
-              forward && (coeffLastDim.isZero() || coeffLastDim.isPos())
-            } else {
-              nFiltered += 1
-              true
+            val memAccMapped : isl.BasicMap = Isl.islBasicMapFromMap(memAcc.applyDomain(stmtSched))
+            var comp : isl.Map = isl.Map.fromDomainAndRange(stmtDomain, stmtDomain)
+            comp = comp.applyDomain(stmtSched).applyRange(stmtSched)
+
+            val compLsp : isl.LocalSpace = isl.LocalSpace.fromSpace(comp.getSpace)
+            for (d <- 0 until (stmtSched.dim(T_OUT) - 1)) {
+              var constr : isl.Constraint = isl.Constraint.allocEquality(compLsp)
+              constr = constr.setCoefficientSi(T_IN, d, 1)
+              constr = constr.setCoefficientSi(T_OUT, d, -1)
+              comp = comp.addConstraint(constr)
             }
+            val ineqConstr : isl.Constraint = isl.Constraint.allocInequality(isl.LocalSpace.fromSpace(comp.getSpace))
+              .setCoefficientSi(T_IN, stmtSched.dim(T_OUT) - 1, -1)
+              .setCoefficientSi(T_OUT, stmtSched.dim(T_OUT) - 1, 1).setConstantSi(-1)
+            comp = comp.addConstraint(ineqConstr)
+
+            comp = comp.applyDomain(memAccMapped).applyRange(memAccMapped)
+
+            val deltas : isl.Set = comp.deltas()
+
+            var lastForward : isl.Set = isl.Set.universe(deltas.getSpace)
+            for (d <- 0 until (lastForward.dim(T_SET) - 1))
+              lastForward = lastForward.fixVal(T_SET, d, isl.Val.fromInt(lastForward.getCtx, 0))
+            val constr : isl.Constraint = isl.Constraint.allocInequality(isl.LocalSpace.fromSpace(lastForward.getSpace))
+              .setCoefficientSi(T_SET, lastForward.dim(T_SET) - 1, 1)
+            lastForward = lastForward.addConstraint(constr)
+
+            deltas.isSubset(lastForward)
           }
         }
-        memAccessesForward
+        memAccessesForwardStmt
       }).toList.flatten
-    val result : Double = (memAccessesForward.count(_ == true) - nFiltered).toDouble / (memAccessesForward.size - nFiltered).toDouble
+    var n = memAccessesForward.size
+    if (n == 0)
+      return 1
+    val result : Double = (memAccessesForward.count(_ == true)).toDouble / n.toDouble
     return result
   }
 
@@ -120,4 +137,6 @@ object MemAccessPattern extends Feature {
   def isMultiStmt() : Boolean = false
 
   override def toString() : String = getClass.getSimpleName
+
+  override def getDisplayName() : String = "memory access pattern"
 }

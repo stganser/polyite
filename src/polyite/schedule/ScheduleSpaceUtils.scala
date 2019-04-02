@@ -603,7 +603,7 @@ object ScheduleSpaceUtils {
     for (i <- 0 until depA.length) {
       var nInterf : Int = 0
       for (j <- 0 until depA.length)
-        if (i != j && !checkInterference(depA(i), depA(j), initBoundingBox))
+        if (i != j && checkInterference(depA(i), depA(j), initBoundingBox))
           nInterf += 1
       result.put(depA(i), nInterf)
       System.gc()
@@ -816,7 +816,7 @@ object ScheduleSpaceUtils {
 
     return (for (aDim <- 0 until nArrayDims) yield {
       val dimSize : Long = accessedArrayParts.map(getSizeOfDim(_, aDim)).max
-      val subscriptMatrix : Array[Array[Rat]] = buildSubscriptMatrix(accessRelations, aDim)
+      val subscriptMatrix : Array[Array[Rat]] = buildSubscriptMatrix(accessRelations.toList, aDim)
       val subscriptMatrixRank : Int = if (subscriptMatrix.isEmpty)
         0
       else Util.calcRowRank(Util.calcRowEchelonForm(subscriptMatrix, subscriptMatrix.size, subscriptMatrix(0).size))
@@ -824,7 +824,7 @@ object ScheduleSpaceUtils {
     }).sum
   }
 
-  private def buildSubscriptMatrix(accessRelations : Iterable[isl.Map], arrayDim : Int) : Array[Array[Rat]] = {
+  private def buildSubscriptMatrix(accessRelations : List[isl.Map], arrayDim : Int) : Array[Array[Rat]] = {
     return accessRelations.map((rels : isl.Map) => {
       var rows : List[Array[Rat]] = List.empty
       rels.foreachBasicMap((rel : isl.BasicMap) => {
@@ -845,7 +845,7 @@ object ScheduleSpaceUtils {
     val projection : isl.Set = Isl.islSetProjectOntoDim(polytope, d)
     val min : Long = projection.lexmin().samplePoint().getCoordinateVal(T_SET, 0).getNumSi
     val max : Long = projection.lexmax().samplePoint().getCoordinateVal(T_SET, 0).getNumSi
-    return max - min
+    return max - min + 1
   }
 
   private def calcTrafficSizeOfDep(dep : isl.Map, srcAccessLocs : Set[String],
@@ -873,6 +873,7 @@ object ScheduleSpaceUtils {
             for (s1 : isl.Set <- destAccessed) {
               var accessedByBoth : isl.Set = Isl.simplify(s0.intersect(s1))
               if (!accessedByBoth.isEmpty()) {
+                
                 val nParam = accessedByBoth.getSpace.dim(T_PAR)
                 for (i <- 0 until nParam) {
                   val dimName : String = accessedByBoth.getDimName(T_PAR, i)
@@ -897,7 +898,6 @@ object ScheduleSpaceUtils {
     if (s.isEmpty())
       return 0
 
-    Isl.islSetCountNPoints(conf.barvinokBinary, conf.barvinokLibraryPath, s).max().getNumSi
     val poly : isl.PwQpolynomial = Isl.islSetCountNPoints(conf.barvinokBinary, conf.barvinokLibraryPath, s)
     val max : isl.Val = poly.max()
     //    if (max.isNeginfty() || max.isInfty()) {

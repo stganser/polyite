@@ -39,7 +39,7 @@ private object CountNumSeqAndSetNodesVisitor extends ScheduleNodeVisitor[Int] {
 
   def visit(b : LeafNode) : Int = 0
 
-  def visit(b : SetNode) : Int = 1 + b.getChildren.map(_._2.accept(this)).sum
+  def visit(b : SetNode) : Int = 1 + b.getChildren.toList.map(_._2.accept(this)).sum
 
   def visit(b : SeqNode) : Int = 1 + b.getChildren.map(_._2.accept(this)).sum
 

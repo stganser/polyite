@@ -389,8 +389,10 @@ object MainUtil {
         evaluatedScheds = evaluatedScheds ++ evalResult
       } else {
         // Evaluate the schedules.
+        Timer.stopTimer("")
         val schedEvalStrategy : AbstractFitnessEvaluation = EvaluationStrategyFactory.createEvaluationStrategy(conf, scop, domInfo, deps, s => s)
         myLogger.info("Evaluating each schedule.")
+        Timer.restartTimer("")
         val (evalResult : HashMap[Schedule, Fitness], evalSuccess : Boolean) =
           schedEvalStrategy.evaluateSchedules(scheds2Eval)
         evaluatedScheds = evaluatedScheds ++ evalResult
