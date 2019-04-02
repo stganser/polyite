@@ -110,16 +110,21 @@ object MutationStrategies {
 
   /**
     * Replaces a block of dimensions in the given schedule. Simulated annealing controls the block size. At smallest
-    * possible block size is two, in order to avoid convergence to dimension replacement.
+    * possible block size is two for schedules with at least two dimensions, in order to avoid convergence to dimension replacement.
     */
   def replaceBlocksOfDims(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
     val tmpCtx : isl.Ctx = Isl.initCtx()
     val schedTmp : Schedule = s.transferToCtx(tmpCtx)
-    var blockSize : Int = (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
+    var blockSize : Int = if (s.numDims > 1)
+      (annealMutationProbability(conf, generation, conf.probabilityToMutateSchedRow) * (Random.nextInt(s.numDims - 1) + 1)).ceil.toInt
+    else
+      1
     if (blockSize >= s.numDims)
       blockSize -= 1
     if (blockSize <= 1 && s.numDims > 1)
       blockSize = 2
+    else if (s.numDims == 1)
+      blockSize = 1
     val fstDimIndex = Random.nextInt(s.numDims - blockSize + 1)
 
     val newSched : Schedule = new Schedule(schedTmp.domInfo, schedTmp.deps)
