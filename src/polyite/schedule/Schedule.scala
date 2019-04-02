@@ -269,7 +269,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   def replaceScheduleVector(dim : Int, coeffs : List[Rat], schedSummands : Set[ScheduleSummand]) {
     scheduleSummands(dim) = schedSummands
     scheduleVectors(dim) = coeffs
-    val intCoeffs = ScheduleVectorUtils.multiplyWithCommonDenominator(coeffs)
     updateStronglySatisfiedDependences(dim)
     strRepr = null
     schedMap = null
