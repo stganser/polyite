@@ -175,7 +175,7 @@ object MutationStrategies {
   /**
     * Replaces the prefix of a given schedule. The number of preserved dimensions
     * is randomly chosen and increases with growing values of {@code generation}
-    * (simluated annealing).
+    * (simulated annealing).
     */
   def replacePrefix(conf : ConfigGA, scop : ScopInfo, generation : Int, sampler : SamplingStrategy)(s : Schedule) : Option[Schedule] = {
     if (s.numDims < 2)
