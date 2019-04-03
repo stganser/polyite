@@ -36,7 +36,7 @@ object CrossoverStrategies {
     val dep2DimsSched1 : Map[Dependence, Set[Int]] = constructDep2Dim(s1)
     val dep2DimsSched2 : Map[Dependence, Set[Int]] = constructDep2Dim(s2)
     val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
-    rowCrossoverRec(s1, s2, new Schedule(s1.domInfo, s1.deps), dep2DimsSched1,
+    return rowCrossoverRec(s1, s2, new Schedule(s1.domInfo, s1.deps), dep2DimsSched1,
       dep2DimsSched2) match {
         case Some(s) => {
           val sSimplified : Schedule = ScheduleUtils.simplify(s)
@@ -62,7 +62,7 @@ object CrossoverStrategies {
         }
       }
     }
-    dep2Dim
+    return dep2Dim
   }
 
   private def rowCrossoverRec(s1 : Schedule, s2 : Schedule,
