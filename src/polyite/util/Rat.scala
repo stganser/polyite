@@ -11,7 +11,7 @@ import scala.collection.mutable.TreeSet
 
 object Rat {
   object RatNumDenomOrdering extends Ordering[(BigInt, BigInt, Rat)] {
-    override def compare(a: (BigInt, BigInt, Rat), b: (BigInt, BigInt, Rat)) : Int = {
+    override def compare(a : (BigInt, BigInt, Rat), b : (BigInt, BigInt, Rat)) : Int = {
 
       if (a._1 != b._1)
         return if (a._1 < b._1) -1 else 1
@@ -21,27 +21,32 @@ object Rat {
     }
   }
   /**
-   * Caches all Rat instances.
-   */
+    * Caches all Rat instances.
+    */
   private val cache : TreeSet[(BigInt, BigInt, Rat)] = TreeSet.empty(RatNumDenomOrdering)
 
   def apply(numerator : BigInt, denominator : BigInt) : Rat = {
     if (denominator == 0)
       throw new IllegalArgumentException("the denominator must not be 0")
 
-    cache.synchronized{
-      val findcached = (x:(BigInt, BigInt, Rat)) => x._1 == numerator && x._2 == denominator
+    val gcd : BigInt = numerator.gcd(denominator)
+
+    val numRed : BigInt = numerator / gcd
+    val denRed : BigInt = denominator / gcd
+
+    cache.synchronized {
+      val findcached = (x : (BigInt, BigInt, Rat)) => x._1 == numRed && x._2 == denRed
       val cached = cache.find(findcached(_))
       if (cached.isDefined) {
         cached.get._3
       } else {
         val rat = new Rat
-        rat.n = numerator
-        rat.d = denominator
-        if (denominator != 1)
+        rat.n = numRed
+        rat.d = denRed
+        if (denRed != 1)
           rat.reduce
         rat.correctSign
-        cache.add((numerator, denominator, rat))
+        cache.add((numRed, denRed, rat))
         rat
       }
     }
@@ -91,16 +96,16 @@ object Rat {
   def fromString(s : String) : Rat = fromStringOptCheck(true)(s)
 
   /**
-   * Parses Strings to Rat, but omits any validity checks.
-   */
-  def fromStringNoCheck(s: String): Rat = fromStringOptCheck(false)(s)
-  
+    * Parses Strings to Rat, but omits any validity checks.
+    */
+  def fromStringNoCheck(s : String) : Rat = fromStringOptCheck(false)(s)
+
   /**
-   * Parses Strings to Rat, optionally checking for validity.
-   */
+    * Parses Strings to Rat, optionally checking for validity.
+    */
   def fromStringOptCheck(checkvalid : Boolean)(s : String) : Rat = {
     if (checkvalid) {
-      val regexp: String = "\\(-?[0-9]+( / [0-9]+)?\\)"
+      val regexp : String = "\\(-?[0-9]+( / [0-9]+)?\\)"
       if (!s.matches(regexp))
         throw new NumberFormatException("s does not match the expected format " + regexp + ": " + s)
     }
@@ -136,6 +141,8 @@ object Rat {
     res = r1 + r3
     assert(res.n == 1 && res.d == 1)
     res = Rat(0, 5)
+    assert(res.n == 0 && res.d == 1)
+    res = Rat(0, -5)
     assert(res.n == 0 && res.d == 1)
     res = Rat(1, 4).ceil
     assert(res.n == 1 && res.d == 1)
