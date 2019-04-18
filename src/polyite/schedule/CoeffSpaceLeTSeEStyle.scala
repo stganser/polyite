@@ -293,6 +293,7 @@ object CoeffSpaceLeTSeEStyle {
       System.gc()
       System.gc()
       System.gc()
+      depsSorted = sortDeps(depsSorted, scop, initBoundingBox, conf)
     }
     myLogger.info("The schedule space has " + dimPolyhedra.size + " dimensions.")
     return Some(dimPolyhedra.reverse)
@@ -327,13 +328,16 @@ object CoeffSpaceLeTSeEStyle {
     return Some(coeffSpace, unsatisfiableDeps.toSet)
   }
 
+  private var dep2TrafficSize : Map[Dependence, Long] = null
+
   private def sortDeps(deps : List[Dependence], scop : ScopInfo,
     initBoundingBox : isl.Set, conf : ConfigRandLeTSeEStyle) : List[Dependence] = {
-    val dep2TrafficSize : Map[Dependence, Long] = conf.depsWeighingMethod match {
-      case ConfigRandLeTSeEStyle.DepsWeighingMethod.STMT_MEM_TRAFFIC        => ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps, scop, conf)
-      case ConfigRandLeTSeEStyle.DepsWeighingMethod.APPROX_STMT_MEM_TRAFFIC => ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmtsApprox(deps, scop, conf)
-      case ConfigRandLeTSeEStyle.DepsWeighingMethod.DEP_CACHE_FOOT_PRINT    => ScheduleSpaceUtils.calcTrafficSizesOfDeps(deps, scop, conf)
-    }
+    if (dep2TrafficSize == null)
+      dep2TrafficSize = conf.depsWeighingMethod match {
+        case ConfigRandLeTSeEStyle.DepsWeighingMethod.STMT_MEM_TRAFFIC        => ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmts(deps, scop, conf)
+        case ConfigRandLeTSeEStyle.DepsWeighingMethod.APPROX_STMT_MEM_TRAFFIC => ScheduleSpaceUtils.calcMemTrafficSizesOfDepStmtsApprox(deps, scop, conf)
+        case ConfigRandLeTSeEStyle.DepsWeighingMethod.DEP_CACHE_FOOT_PRINT    => ScheduleSpaceUtils.calcTrafficSizesOfDeps(deps, scop, conf)
+      }
     val dep2Interference : Map[Dependence, Int] = ScheduleSpaceUtils.calcInterferenceOfDeps(
       deps,
       initBoundingBox)
