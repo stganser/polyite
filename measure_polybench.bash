@@ -224,9 +224,9 @@ function compile {
     local polybenchFlags=$3
     if [ ${makeParallel} == "true" ]
     then
-        pollyFlags="${pollyFlags} ${parPollyOptFlags}"
+        local currPollyFlags="${pollyFlags} ${parPollyOptFlags}"
     else
-        pollyFlags="${pollyFlags} ${seqPollyOptFlags}"
+        local currPollyFlags="${pollyFlags} ${seqPollyOptFlags}"
     fi
     # Polly
     # measure the duration of code generation
@@ -236,9 +236,9 @@ function compile {
     do
         if [ ${useNumactl} == "true" ]
         then
-            /usr/bin/time -f%e -ocompileTimeOut numactl ${numactlConf} ${polly} -march=native -O3 ${pollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -o /dev/null &
+            /usr/bin/time -f%e -ocompileTimeOut numactl ${numactlConf} ${polly} -march=native -O3 ${currPollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -o /dev/null &
         else
-            /usr/bin/time -f%e -ocompileTimeOut ${polly} -march=native -O3 ${pollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -o /dev/null &
+            /usr/bin/time -f%e -ocompileTimeOut ${polly} -march=native -O3 ${currPollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -o /dev/null &
         fi
         pid=$!
 	    wait ${pid}
@@ -252,7 +252,7 @@ function compile {
 	    compileDurations[${i}]=${currCompileDuration}
 	    rm compileTimeOut
     done
-    ${polly} -march=native -O3 ${pollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -lpapi -o ${prefix} &
+    ${polly} -march=native -O3 ${currPollyFlags} ${polybenchFlags} -I${sourceLocation} ${polybenchC} ${benchmarkC} -lm -lgomp -lpapi -o ${prefix} &
     pid=$!
     wait ${pid}
     if [ $? -ne 0 ]
