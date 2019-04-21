@@ -147,7 +147,8 @@ object MutationStrategies {
     for (d <- fstDimIndex + blockSize until schedTmp.numDims) {
       newSched.addForeignDim(schedTmp, d)
     }
-    val schedCompleted : Schedule = ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSched, ScheduleUtils.generateLinIndepScheduleVector)
+    val schedSimpl : Schedule = ScheduleUtils.simplify(newSched)
+    val schedCompleted : Schedule = ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, schedSimpl, ScheduleUtils.generateLinIndepScheduleVector)
     return Some(schedCompleted.transferToCtx(s.domInfo.ctx))
   }
 
@@ -320,7 +321,8 @@ object MutationStrategies {
     if (!stillUncarried.isEmpty)
       return Some(ScheduleUtils.completeSchedule(newSched, conf.maxNumRays, conf.maxNumLines, conf, 1, stillUncarried, sampler).head)
     val samplerParams : SamplingStrategyParams = sampler.createSamplingStrategyParamsFromConf(conf)
-    return Some(ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, newSched,
+    val schedSimpl : Schedule = ScheduleUtils.simplify(newSched)
+    return Some(ScheduleUtils.expandToFullSchedule(conf, sampler, samplerParams, schedSimpl,
       ScheduleUtils.generateLinIndepScheduleVector))
   }
 
