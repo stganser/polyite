@@ -279,7 +279,7 @@ trait AbstractScheduleEvaluation extends AbstractFitnessEvaluation {
     do {
       bp = startBenchmarkingProcess(conf, workerId, logPrefix)
       if (retry)
-        Thread.sleep(15 * 60 + 1000) // wait for 15 minutes
+        Thread.sleep(15 * 60 * 1000) // wait for 15 minutes
     } while (retry)
 
     if (timeout.isDefined && !bp.isDefined)
