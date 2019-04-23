@@ -3,7 +3,7 @@ package polyite.schedule.sampling
 import polyite.util.Rat
 
 /**
- * Single monimial of the linear combination that forms a schedule vectors.
+ * Single monomial of the linear combination that forms a schedule vectors.
  */
 abstract class ScheduleSummand {
   def v : List[Rat]
