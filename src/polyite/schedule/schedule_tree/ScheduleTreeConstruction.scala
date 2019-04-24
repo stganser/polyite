@@ -312,13 +312,13 @@ object ScheduleTreeConstruction {
     val isSeq = maxDiff < coeffValue
 
     // if the number of Iterations coefficients or the value differs -> skip
-    // if the difference of the consant value is bigger than the iteration step -> skip
+    // if the difference of the constant value is bigger than the iteration step -> skip
     if (!sameNumberOfCoeffs || !sameCoeffValue || !isSeq)
       return List(sttmts)
 
     // group stmts by their constant value and return ordered list of stmts.
     val groups = constPerStmt.groupBy(f => f._2)
-    return groups.map(f => (f._1, f._2.keySet)).toList.sortBy(f => f._1).map(f => f._2.toSet)
+    return groups.map(f => (f._1, f._2.keySet)).toList.sortBy(f => f._1).map(f => f._2.toList.sorted.toSet)
   }
 
   private def buildSetPartitioning(
