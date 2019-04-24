@@ -381,7 +381,7 @@ class BandNodeLoop private (domain : isl.UnionSet, scheds : List[(isl.UnionMap, 
       val sched : isl.UnionMap = t._1._1
       val coincident : Boolean = t._1._2
       val loopInfo : Map[String, Boolean] = t._2
-      "(" + Isl.islUnionMapUniqueToString(sched) + ", coincident: " + coincident + ", loopInfo: " + loopInfo + ")"
+      "(" + Isl.islUnionMapUniqueToString(sched) + ", coincident: " + coincident + ", loopInfo: " + loopInfo.toList.sortBy(_._1) + ")"
     }).mkString("[", ";", "]")
     sb.append("BandNodeLoop")
       .append(thisStr)
