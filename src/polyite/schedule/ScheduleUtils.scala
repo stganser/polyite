@@ -508,7 +508,7 @@ object ScheduleUtils {
         mAff = mAff.setAff(dim, aff)
       }
       val stmtSchedule = isl.Map.fromMultiAff(mAff).setTupleName(isl.DimType.In, stmt)
-      schedule = if (schedule == null) stmtSchedule else schedule.union(stmtSchedule)
+      schedule = schedule.union(stmtSchedule)
     }
 
     return schedule
