@@ -346,8 +346,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   /**
     * Returns the rational coefficient matrix of this schedule.
     */
-  def getScheduleVectors() : Iterable[List[Rat]] = {
-    scheduleVectors.clone()
+  def getScheduleVectors() : List[List[Rat]] = {
+    scheduleVectors.toList
   }
 
   /**
