@@ -266,7 +266,9 @@ object ScheduleUtils {
     deps : Set[Dependence], maxNumScheds : Int, basis : Set[Schedule], maxNumRays : NumGeneratorsLimit,
     maxNumLines : NumGeneratorsLimit, conf : Config, sampler : SamplingStrategy, hashSched : Schedule => ScheduleHash) : Set[Schedule] = {
     val scheds : HashMap[ScheduleHash, Schedule] = HashMap.empty
-    basis.map((s : Schedule) => scheds.put(hashSched(s), s))
+    scheds.synchronized {
+      basis.map((s : Schedule) => scheds.put(hashSched(s), s))
+    }
 
     def genScheds(idx : Int)(x : Unit) {
       var numFailures = 0
