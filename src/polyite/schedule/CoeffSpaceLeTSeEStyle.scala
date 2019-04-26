@@ -251,10 +251,11 @@ object CoeffSpaceLeTSeEStyle {
     schedGenWorkers.tasksupport = new ForkJoinTaskSupport(pool)
     schedGenWorkers.map(f => f(()))
     pool.shutdown()
-
-    if (result.size < maxNumScheds)
-      myLogger.warning("Failed to produce as many schedules as requested: " + result.size)
-    return result.values.toSet
+    result.synchronized {
+      if (result.size < maxNumScheds)
+        myLogger.warning("Failed to produce as many schedules as requested: " + result.size)
+      return result.values.toSet
+    }
   }
 
   /**

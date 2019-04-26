@@ -331,7 +331,7 @@ object ScheduleUtils {
     schedGenWorkers.tasksupport = new ForkJoinTaskSupport(pool)
     schedGenWorkers.map(f => f(()))
     pool.shutdown()
-    return scheds.values.toSet
+    return scheds.synchronized { scheds.values.toSet }
   }
 
   /**

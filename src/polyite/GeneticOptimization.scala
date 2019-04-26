@@ -297,7 +297,7 @@ object GeneticOptimization {
     schedGenWorkers.tasksupport = new ForkJoinTaskSupport(pool)
     schedGenWorkers.map(f => f(()))
     pool.shutdown()
-    return fullPopulation.map(t => (t._2._1, t._2._2))
+    return fullPopulation.synchronized{ fullPopulation.map(t => (t._2._1, t._2._2)) }
   }
 
   private def applyCrossover(f : (Schedule, Schedule) => HashSet[Schedule], selectionStrategy : Array[(Schedule, Fitness)] => Schedule,
