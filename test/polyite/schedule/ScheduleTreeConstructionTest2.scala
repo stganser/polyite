@@ -56,4 +56,13 @@ class ScheduleTreeConstructionTest2 extends AbstractScopTest {
     println(schedTree)
     assertEquals(expectedResult, schedTree.toString())
   }
+
+  @Test
+  def test2() {
+    val ctx : isl.Ctx = Isl.ctx
+    val sched : isl.UnionMap = isl.UnionMap.readFromStr(ctx, "[n] -> { S0[i] -> [3*i + 0 - 4 + 5*n, 0]; S1[i] -> [3*i + 1 - 4 + 5*n, 0]; S2[i] -> [3*i + 1 - 4 + 5*n, 1] }")
+    val schedTree : isl.Schedule = ScheduleTreeConstruction.islUnionMap2IslScheduleTree(sched, domInfo, scop, deps, conf)
+    println(schedTree)
+    assertEquals(expectedResult, schedTree.toString())
+  }
 }

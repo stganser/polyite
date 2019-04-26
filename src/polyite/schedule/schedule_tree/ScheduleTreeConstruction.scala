@@ -186,7 +186,8 @@ object ScheduleTreeConstruction {
 
     // The current schedule node is regular schedule dimension
     if (sttmtsPartSeq.size == 1) {
-      val currSchedReduced = reduceToStatements(schedCurrDim, sttmts)
+      val currSchedReducedUnsimpl : isl.UnionMap = reduceToStatements(schedCurrDim, sttmts)
+      val currSchedReduced : isl.UnionMap = RemoveCommonOffsetVisitor.simplifySchedMap(currSchedReducedUnsimpl, currDomain).getOrElse(currSchedReducedUnsimpl)
 
       // Check whether the current schedule node might correspond to a loop
       if (checkAllCoeffsZero(currSchedReduced, domInfo))

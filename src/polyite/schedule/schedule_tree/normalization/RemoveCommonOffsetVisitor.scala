@@ -9,11 +9,8 @@ import polyite.schedule.ScheduleVectorUtils
 
 import isl.Isl
 
-class RemoveCommonOffsetVisitor extends PartialSchedMapNormalizationVisitor {
-
-  override def toString() = "remove common offset"
-
-  override def simplifySchedMap(m : isl.UnionMap, domain : isl.UnionSet) : Option[isl.UnionMap] = {
+object RemoveCommonOffsetVisitor {
+  def simplifySchedMap(m : isl.UnionMap, domain : isl.UnionSet) : Option[isl.UnionMap] = {
     val domInfo : DomainCoeffInfo = DomainCoeffInfo(domain)
     val coeffVect : Array[BigInt] = ScheduleUtils.islUnionMap2CoeffMatrix(domInfo, m).head
     val sttmts : List[String] = Isl.islUnionMapGetTupleNames(m).toList
@@ -73,4 +70,11 @@ class RemoveCommonOffsetVisitor extends PartialSchedMapNormalizationVisitor {
       return -minCoeff
     return BigInt(0)
   }
+}
+
+class RemoveCommonOffsetVisitor extends PartialSchedMapNormalizationVisitor {
+
+  override def toString() = "remove common offset"
+
+  override def simplifySchedMap(m : isl.UnionMap, domain : isl.UnionSet) : Option[isl.UnionMap] = RemoveCommonOffsetVisitor.simplifySchedMap(m, domain)
 }
