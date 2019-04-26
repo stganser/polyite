@@ -130,8 +130,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   private var scheduleSummands : ArrayBuffer[Set[ScheduleSummand]] = new ArrayBuffer()
   private var scheduleVectors : ArrayBuffer[List[Rat]] = new ArrayBuffer()
   private var dim2StronglySatisfiedDeps : ArrayBuffer[Set[Dependence]] = ArrayBuffer.empty
-  private var strRepr : String = null
-  private var schedMap : isl.UnionMap = null
 
   /**
     * Produces a deep copy of this schedule.
@@ -141,8 +139,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     copy.scheduleVectors = scheduleVectors.clone
     copy.dim2StronglySatisfiedDeps = dim2StronglySatisfiedDeps.clone()
     copy.scheduleSummands = scheduleSummands.clone
-    copy.strRepr = strRepr
-    copy.schedMap = schedMap
     return copy
   }
 
@@ -158,8 +154,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleVectors.zip(scheduleSummands).map((t : (List[Rat], Set[ScheduleSummand])) => {
       copy.addScheduleVector(t._1, t._2)
     })
-    copy.strRepr = strRepr
-    copy.schedMap = isl.UnionMap.readFromStr(newCtx, strRepr)
     return copy
   }
 
@@ -175,8 +169,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleVectors.zip(scheduleSummands).map((t : (List[Rat], Set[ScheduleSummand])) => {
       copy.addScheduleVector(t._1, t._2)
     })
-    copy.strRepr = strRepr
-    copy.schedMap = isl.UnionMap.readFromStr(newCtx, strRepr)
     return copy
   }
 
@@ -191,10 +183,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleSummands.append(schedSummands)
     scheduleVectors.append(coeffs)
     updateStronglySatisfiedDependences(scheduleVectors.length - 1)
-    strRepr = null
-    schedMap = null
-    getSchedule
-    toString
   }
   /**
     * Appends a new (inner) dimension to this schedule.
@@ -211,10 +199,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleSummands.append(schedSummands)
     scheduleVectors.append(coeffs)
     dim2StronglySatisfiedDeps.append(dependencies)
-    strRepr = null
-    schedMap = null
-    getSchedule
-    toString
   }
   /**
     * Appends a new (inner) dimension to this schedule that is equal to
@@ -227,10 +211,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleSummands.append(o.scheduleSummands(otherDim))
     scheduleVectors.append(o.scheduleVectors(otherDim))
     updateStronglySatisfiedDependences(scheduleVectors.length - 1)
-    strRepr = null
-    schedMap = null
-    getSchedule
-    toString
   }
 
   /*
@@ -255,10 +235,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       scheduleSummands.remove(lastIdx)
       scheduleVectors.remove(lastIdx)
       dim2StronglySatisfiedDeps.remove(lastIdx)
-      strRepr = null
-      schedMap = null
-      getSchedule
-      toString
     }
   }
 
@@ -283,10 +259,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleSummands(dim) = schedSummands
     scheduleVectors(dim) = coeffs
     updateStronglySatisfiedDependences(dim)
-    strRepr = null
-    schedMap = null
-    getSchedule
-    toString
   }
 
   /**
@@ -303,10 +275,6 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     scheduleSummands(myDim) = o.scheduleSummands(otherDim)
     scheduleVectors(myDim) = o.scheduleVectors(otherDim)
     updateStronglySatisfiedDependences(myDim)
-    strRepr = null
-    schedMap = null
-    getSchedule
-    toString
   }
 
   /**
@@ -325,10 +293,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     * schedule coefficients.
     */
   def getSchedule : isl.UnionMap = {
-    if (schedMap == null)
-      schedMap = ScheduleUtils.coeffMatrix2IslUnionMap(domInfo, scheduleVectors.map(ScheduleVectorUtils
+    return ScheduleUtils.coeffMatrix2IslUnionMap(domInfo, scheduleVectors.map(ScheduleVectorUtils
         .multiplyWithCommonDenominator) : _*)
-    return schedMap
   }
 
   /**
@@ -538,9 +504,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
   }
 
   override def toString : String = {
-    if (strRepr == null)
-      strRepr = getSchedule.toString
-    return strRepr
+    return getSchedule.toString
   }
 
   /**
