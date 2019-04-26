@@ -25,12 +25,14 @@ import polyite.schedule.sampling.ScheduleSummand
   * removed dynamically. A schedule may be transformed into an Isl union map with
   * integer coefficients.
   *
-  * For the purpose of future minimalist mutation the linear combination of
+  * For the purpose of future fine-grained mutation the linear combination of
   * Chernikova generators that formed the coefficient vector of each schedule
   * dimension is stored, too.
   *
   * The dimensions of a schedule are numbered. The outermost dimension akka the
   * first row of the schedule coefficient matrix is dimension 0.
+  *
+  * Note that this class is not thread-safe. Not more than one thread may perform writing operations at a time.
   */
 
 object Schedule {
@@ -39,7 +41,8 @@ object Schedule {
     * Filters {@code deps} for dependencies that are satisfied strongly by the
     * schedule given through the coefficient matrix {@code coeffs}.
     */
-  private def getDepsStronglySatisfiedBySchedule(coeffs : List[BigInt],
+  private def getDepsStronglySatisfiedBySchedule(
+    coeffs : List[BigInt],
     deps : Set[Dependence], domInfo : DomainCoeffInfo) : Set[Dependence] = {
     deps.filter { d : Dependence =>
       //Util.islSetContains(d.strongConstr, coeffs.toArray)
@@ -52,7 +55,8 @@ object Schedule {
     * Filters {@code deps} for dependencies that are satisfied weakly by the
     * schedule given through the coefficient matrix {@code coeffs}.
     */
-  private def getDepsWeaklySatisfiedBySchedule(coeffs : List[BigInt],
+  private def getDepsWeaklySatisfiedBySchedule(
+    coeffs : List[BigInt],
     deps : Set[Dependence], domInfo : DomainCoeffInfo) : Set[Dependence] = {
     deps.filter { d : Dependence =>
       //Util.islSetContains(d.weakConstr, coeffs.toArray)
@@ -155,6 +159,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       copy.addScheduleVector(t._1, t._2)
     })
     copy.strRepr = strRepr
+    copy.schedMap = isl.UnionMap.readFromStr(newCtx, strRepr)
     return copy
   }
 
@@ -171,6 +176,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       copy.addScheduleVector(t._1, t._2)
     })
     copy.strRepr = strRepr
+    copy.schedMap = isl.UnionMap.readFromStr(newCtx, strRepr)
     return copy
   }
 
@@ -187,8 +193,10 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     updateStronglySatisfiedDependences(scheduleVectors.length - 1)
     strRepr = null
     schedMap = null
+    getSchedule
+    toString
   }
-   /**
+  /**
     * Appends a new (inner) dimension to this schedule.
     * This avoids costly recalculating of dependencies,
     * if dependencies are are already known.
@@ -199,13 +207,14 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     * formed {@code coeffs}.
     * @param dependencies the dependencies strongly satisfied by this dimension
     */
-  def addScheduleVector(coeffs : List[Rat], schedSummands : Set[ScheduleSummand]
-      ,dependencies : Set[Dependence]) {
+  def addScheduleVector(coeffs : List[Rat], schedSummands : Set[ScheduleSummand], dependencies : Set[Dependence]) {
     scheduleSummands.append(schedSummands)
     scheduleVectors.append(coeffs)
     dim2StronglySatisfiedDeps.append(dependencies)
     strRepr = null
     schedMap = null
+    getSchedule
+    toString
   }
   /**
     * Appends a new (inner) dimension to this schedule that is equal to
@@ -220,9 +229,11 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     updateStronglySatisfiedDependences(scheduleVectors.length - 1)
     strRepr = null
     schedMap = null
+    getSchedule
+    toString
   }
 
-  /* 
+  /*
    * Bookkeeping of the dependences that are satisfied strongly by each schedule
    * dimension.
    */
@@ -246,6 +257,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       dim2StronglySatisfiedDeps.remove(lastIdx)
       strRepr = null
       schedMap = null
+      getSchedule
+      toString
     }
   }
 
@@ -272,6 +285,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     updateStronglySatisfiedDependences(dim)
     strRepr = null
     schedMap = null
+    getSchedule
+    toString
   }
 
   /**
@@ -290,6 +305,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     updateStronglySatisfiedDependences(myDim)
     strRepr = null
     schedMap = null
+    getSchedule
+    toString
   }
 
   /**
@@ -562,7 +579,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       .take(maxDim).map(ScheduleVectorUtils.multiplyWithCommonDenominator(_).toArray)
 
     val sttmntInfo = domInfo.stmtInfo(sttmnt)
-    val linDepSpace : isl.Set = Schedule.computeLinDepSpaceBigInt(domInfo,
+    val linDepSpace : isl.Set = Schedule.computeLinDepSpaceBigInt(
+      domInfo,
       scheduleVectorsPrefix, sttmntInfo.itStart, sttmntInfo.nrIt)
     return Isl.simplify(linDepSpace)
   }
