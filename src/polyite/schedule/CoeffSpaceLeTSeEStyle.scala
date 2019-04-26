@@ -247,8 +247,10 @@ object CoeffSpaceLeTSeEStyle {
     val schedGenWorkers : ParArray[Unit => Unit] = new ParArray(conf.numScheduleGenThreads)
     for (i <- 0 until schedGenWorkers.length)
       schedGenWorkers(i) = genScheds(i)
-    schedGenWorkers.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(conf.numScheduleGenThreads))
+    val pool = new ForkJoinPool(conf.numScheduleGenThreads)
+    schedGenWorkers.tasksupport = new ForkJoinTaskSupport(pool)
     schedGenWorkers.map(f => f(()))
+    pool.shutdown()
 
     if (result.size < maxNumScheds)
       myLogger.warning("Failed to produce as many schedules as requested: " + result.size)

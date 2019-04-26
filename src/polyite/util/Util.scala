@@ -124,8 +124,10 @@ object Util {
     val workers : ParArray[Unit => Unit] = new ParArray(parallelismLevel)
     for (i <- 0 until parallelismLevel)
       workers(i) = worker(i)
-    workers.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(parallelismLevel))
+    val pool = new ForkJoinPool(parallelismLevel)
+    workers.tasksupport = new ForkJoinTaskSupport(pool)
     workers.map(f => f(()))
+    pool.shutdown()
     var resultList : List[(B, Int)] = List.empty
     while (!outputWithIndex.isEmpty)
       resultList = outputWithIndex.poll :: resultList
