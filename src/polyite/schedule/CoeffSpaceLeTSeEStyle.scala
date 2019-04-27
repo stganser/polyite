@@ -152,7 +152,9 @@ object CoeffSpaceLeTSeEStyle {
     deps : Set[Dependence], generators : List[GeneratorsRat], conf : ConfigRandLeTSeEStyle,
     maxNumScheds : Int, basis : Set[Schedule], hashSched : Schedule => ScheduleHash) : Set[Schedule] = {
     val result : HashMap[ScheduleHash, Schedule] = HashMap.empty
-    basis.foreach((s : Schedule) => result.put(hashSched(s), s))
+    result.synchronized {
+      basis.foreach((s : Schedule) => result.put(hashSched(s), s))
+    }
 
     // Find out the maximum number of generators of all dimensions
     val maxNumRaysAllDims : Int = ChernikovaSamplingStrategy.getMaxNumRays(generators)

@@ -185,7 +185,9 @@ object GeneticOptimization {
     sampler : SamplingStrategy, hashScheds : Schedule => ScheduleHash) : HashMap[Schedule, Fitness] = {
     val timeout = conf.evolutionTimeout * 1000
     val fullPopulation : HashMap[ScheduleHash, (Schedule, Fitness)] = HashMap.empty
-    basis.map(t => fullPopulation.put(hashScheds(t._1), (t._1, t._2)))
+    fullPopulation.synchronized {
+      basis.map(t => fullPopulation.put(hashScheds(t._1), (t._1, t._2)))
+    }
 
     val numRandScheds = math.min(
       (Rat(conf.regularPopulationSize)
@@ -194,8 +196,10 @@ object GeneticOptimization {
     ScheduleUtils.genRandSchedules(domInfo, deps, numRandScheds, conf.maxNumRays, conf.maxNumLines, conf, sampler, hashScheds)
       .map((s : Schedule) => {
         val h : ScheduleHash = hashScheds(s)
-        if (!fullPopulation.contains(h))
-          fullPopulation.put(h, (s, FitnessUnknown))
+        fullPopulation.synchronized {
+          if (!fullPopulation.contains(h))
+            fullPopulation.put(h, (s, FitnessUnknown))
+        }
       })
 
     /*
@@ -213,9 +217,11 @@ object GeneticOptimization {
         }
 
         val h : ScheduleHash = hashScheds(sched)
-        if (!fullPopulation.contains(h)) {
-          fullPopulation.put(h, (sched, fit))
-          myLogger.info(f"inserted migrated schedule into the population: (${sched}, ${fit})")
+        fullPopulation.synchronized {
+          if (!fullPopulation.contains(h)) {
+            fullPopulation.put(h, (sched, fit))
+            myLogger.info(f"inserted migrated schedule into the population: (${sched}, ${fit})")
+          }
         }
       }
       val timeTaken = (System.currentTimeMillis() - timeStart)
@@ -297,7 +303,7 @@ object GeneticOptimization {
     schedGenWorkers.tasksupport = new ForkJoinTaskSupport(pool)
     schedGenWorkers.map(f => f(()))
     pool.shutdown()
-    return fullPopulation.synchronized{ fullPopulation.map(t => (t._2._1, t._2._2)) }
+    return fullPopulation.synchronized { fullPopulation.map(t => (t._2._1, t._2._2)) }
   }
 
   private def applyCrossover(f : (Schedule, Schedule) => HashSet[Schedule], selectionStrategy : Array[(Schedule, Fitness)] => Schedule,
