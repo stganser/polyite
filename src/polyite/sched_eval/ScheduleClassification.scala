@@ -78,17 +78,19 @@ object ScheduleClassification extends AbstractFitnessEvaluation {
       this.domainInfo = domainInfo
       this.scopInf = scopInf
 
-      for (i <- 0 until config.numMeasurementThreads) {
-        classifiers.append(new Classifier(
-          features,
-          config.learningSet.get,
-          config.decTreeMinSamplesLeaf.get,
-          config.learningAlgorithm.get,
-          if (config.learningAlgorithm.get == LearningAlgorithms.RANDOM_FOREST)
-            Some(new RandomForestConfig(config.randForestNTree.get, config.randForestMaxFeatures.get))
-          else
-            None,
-          config.pythonVEnvLocation))
+      this.synchronized {
+        for (i <- 0 until config.numMeasurementThreads) {
+          classifiers.append(new Classifier(
+            features,
+            config.learningSet.get,
+            config.decTreeMinSamplesLeaf.get,
+            config.learningAlgorithm.get,
+            if (config.learningAlgorithm.get == LearningAlgorithms.RANDOM_FOREST)
+              Some(new RandomForestConfig(config.randForestNTree.get, config.randForestMaxFeatures.get))
+            else
+              None,
+            config.pythonVEnvLocation))
+        }
       }
     }
   }
