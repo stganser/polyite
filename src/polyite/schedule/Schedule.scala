@@ -294,7 +294,7 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     */
   def getSchedule : isl.UnionMap = {
     return ScheduleUtils.coeffMatrix2IslUnionMap(domInfo, scheduleVectors.map(ScheduleVectorUtils
-        .multiplyWithCommonDenominator) : _*)
+      .multiplyWithCommonDenominator) : _*)
   }
 
   /**
@@ -598,7 +598,8 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
       if (linIndepSpace == null || Isl.simplify(linIndepSpace).isEmpty()) {
         if (fixFreeDims) {
           // dimension for this statement irrelevant... no exploration required, set anything
-          result = result.fixVal(T_SET, itStart, oneVal) // 0-solution may not be allowed in universe
+          if (nrIt > 0)
+            result = result.fixVal(T_SET, itStart, oneVal) // 0-solution may not be allowed in universe
           for (i <- itStart + 1 until itStart + nrIt)
             result = result.fixVal(T_SET, i, zeroVal)
           for (i <- parStart until parStart + domInfo.nrParPS)
