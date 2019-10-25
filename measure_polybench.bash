@@ -5,6 +5,7 @@ opt="${POLLY_INSTALL_DIR}/bin/opt"
 polly="${POLLY_INSTALL_DIR}/bin/clang"
 llc="${POLLY_INSTALL_DIR}/bin/llc"
 echo "Started"
+unset LD_PRELOAD
 nArgs=20
 function printerr {
     local s=${1}
