@@ -573,6 +573,10 @@ class Schedule(val domInfo : DomainCoeffInfo, val deps : Set[Dependence]) {
     */
   def computeLinIndepSpace(maxDim : Int, fixFreeDims : Boolean) : Option[isl.Set] = {
 
+    if (maxDim == 0 && numDims == 0 && domInfo.nrIt > 0) {
+      return Some(domInfo.universe);
+    }
+    
     if (maxDim < 0 || maxDim > numDims)
       throw new IllegalArgumentException("maxDim must be from the interval [0, "
         + numDims + "(: " + maxDim)
