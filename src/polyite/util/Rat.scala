@@ -166,6 +166,9 @@ object Rat {
     res = (Rat(4) + Rat(3)) * Rat(2)
     assert(res.n == 14 && res.d == 1)
 
+    assert((Rat(8, 3)).hashCode() == (Rat(4, 3) + Rat(16, 12)).hashCode())
+    assert((Rat(2)) == (Rat(2, 3) + Rat(8, 6)))
+    
     res = Rat(4) + (Rat(3) * Rat(2))
     assert(res.n == 10 && res.d == 1)
     res = getRandomRat(Rat(3), Rat(4), 10)
